@@ -14,21 +14,19 @@ LitEngram 是一个面向科研工作者的 AI 驱动的文献精读框架。它
 - **标注即笔记**：PDF 高亮 → 结构化字段 → 概念深挖 → 同步输出，一条线走完
 - **三端同步**：本地 `.md` + Zotero 子笔记 + Notion 每日文献页，各取所需
 - **混合认知标注**：用户划线决定读什么，AI 补充你漏掉的关键维度
+- **Meta-skill 调度**：LitEngram 是调度框架，各阶段通过 `task()` 分发到子 agent 专注执行
 
 ---
 
 ## 管线总览
 
-| 阶段 | 名称 | 产出 |
-|------|------|------|
-| Stage 0 | 入口 | 从 DOI / Zotero key / 标题 接入论文 |
-| Stage 1 | 论文信息提取 | 基本元数据 + 全文 PDF |
-| Stage 2 | 优先级评分 | ⭐必读 / ⚔️精兵强将 / 🌫️飘过 |
-| Stage 3 | 先验上下文注入 | 该论文在你研究谱系中的位置 |
-| Stage 4 | 5 维度方法论解剖 | 被试/设计/统计/生理/结果 — 每维度逐条标记 |
-| Stage 5 | 混合认知标注 | 用户划线 + AI 补充 + 争议标记 + 术语定义 |
-| Stage 6 | 概念深挖 | 9 层术语溯源 + 易混辨析 + 递归展开 |
-| Stage 7 | 笔记合成 + 同步 | 结构化 Markdown → Zotero + Notion |
+| 阶段 | 执行方式 | 产出 |
+|------|---------|------|
+| Stage 1-2 Intake | `task()` 分发 | 优先级 + 上下文 + PDF + 标注清单 |
+| Stage 3 Analysis | `task()` 分发 | 5 维度分析文本 + 概念深挖素材 |
+| Stage 4-5 Annotation | `task()` 分发 | 混合标注（写入 Zotero）+ 审稿人报告 |
+| Stage 6 Note | `task()` 分发 | 结构化笔记 Markdown |
+| Stage 7 Sync | **主 agent 直行** | 本地 .md + Zotero + Notion 三端同步 |
 
 ---
 
@@ -78,7 +76,7 @@ Zotero 自动使用本地的 `zotero.sqlite` 数据库，无需额外配置。
 > "帮我读这篇：DOI 10.1038/s41593-024-01650-4"
 > "LitEngram this paper: C5WAAYXR"
 
-Agent 会自动执行 Stage 0–7 全流程。
+Agent 会自动加载 meta-skill，通过 `task()` 分发各阶段，最后主 agent 完成三端同步。
 
 ### 方式二：手动调用脚本
 
@@ -132,13 +130,17 @@ ns.sync_note(title="论文标题", markdown_content="...", date_str="2026-07-20"
 
 ```
 litengram/
-├── SKILL.md                      # Agent Skill 定义（触发词 + 管线说明）
+├── SKILL.md                      # Meta-skill 入口（调度表 + 触发词）
 ├── README.md                     # 本文件
 ├── .gitignore
 ├── scripts/
 │   ├── notion_sync.py            # Notion API 同步（增量更新，幂等）
 │   └── zotero_sync.py            # Zotero SQLite 写入（XHTML 转换）
 └── references/
+    ├── stage_1-2_intake.md       # Intake 阶段 task prompt
+    ├── stage_3_analysis.md       # 分析阶段 task prompt
+    ├── stage_4-5_annotations.md  # 标注阶段 task prompt
+    ├── stage_6_note.md           # 笔记阶段 task prompt
     ├── annotation_guidelines.md   # 混合认知标注规则
     ├── concept_excavation.md     # 概念深挖 9 层格式
     ├── literature_analysis_framework.md  # 5 维度解剖框架
