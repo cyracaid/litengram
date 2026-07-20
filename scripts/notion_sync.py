@@ -9,7 +9,7 @@ from pathlib import Path
 
 from notion_client import Client
 
-CONFIG_PATH = Path.home() / "Documents/CAD/.litengram_config.json"
+CONFIG_PATH = Path(os.environ.get("LITENGRAM_CONFIG_PATH", str(Path.home() / "Documents/CAD/.litengram_config.json")))
 DAILY_PAGE_NAME = "每日读读文献"
 MAX_APPEND = 100
 MAX_DEPTH = 2

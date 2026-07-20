@@ -6,8 +6,8 @@ import sqlite3
 import os
 from pathlib import Path
 
-ZOTERO_DB = Path.home() / "Zotero/zotero.sqlite"
-LIBRARY_ID = 1
+ZOTERO_DB = Path(os.environ.get("ZOTERO_DB_PATH", str(Path.home() / "Zotero/zotero.sqlite")))
+LIBRARY_ID = int(os.environ.get("LITENGRAM_LIBRARY_ID", "1"))
 
 
 def md_to_zotero_html(md_text):
@@ -287,14 +287,48 @@ def sync_note(markdown_path, parent_item_id):
 
 
 def close_zotero_first():
-    """Try to close Zotero so SQLite is not locked."""
+    """Politely ask Zotero to close, so SQLite is not locked.
+
+    If Zotero refuses or the DB stays locked, the caller
+    will see a clear message and can close it manually.
+    """
     import subprocess
+    import time
+
+    # If Zotero isn't running, nothing to do.
+    ret = subprocess.run(
+        ["pgrep", "-x", "Zotero"],
+        capture_output=True,
+    )
+    if ret.returncode != 0:
+        return
 
     try:
         subprocess.run(
             ["osascript", "-e", 'tell application "Zotero" to quit'],
             capture_output=True,
             timeout=5,
+        )
+    except subprocess.TimeoutExpired:
+        pass
+
+    # Give Zotero a moment to flush and release the lock.
+    for _ in range(10):
+        time.sleep(0.5)
+        ret = subprocess.run(
+            ["pgrep", "-x", "Zotero"],
+            capture_output=True,
+        )
+        if ret.returncode != 0:
+            return
+
+    # If Zotero still refuses, try once more with SIGTERM.
+    try:
+        subprocess.run(
+            ["osascript", "-e",
+             'tell application "Zotero" to quit saving yes'],
+            capture_output=True,
+            timeout=3,
         )
     except Exception:
         pass

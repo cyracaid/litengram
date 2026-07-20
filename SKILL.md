@@ -1,10 +1,12 @@
 ---
 name: litengram
 description: >-
-  LitEngram v1.1: 文献深度精读系统（Single-Paper Deep Reading OS）。
+  LitEngram v1.2: 文献深度精读系统（Single-Paper Deep Reading OS）。
   对学术论文进行优先级分类、研究上下文注入、5 维度方法论解剖、混合认知标注（用户划线+AI补充）、
   概念溯源引擎（含术语深挖9层+易混辨析+递归展开）、审稿人自审、结构化 Engram Note（内联深挖块）、
-  并同步到 Zotero。
+  并同步到 Zotero + Notion 双端。
+  
+  笔者是心理学研究者，框架偏向心理学文献；其他学科也可用，模板细节可能更贴近心理学惯例。
 
   **必须触发**（用户提到以下任意场景）：
   - 读论文、精读、深度精读、帮我读、分析论文、paper reading、paper analysis

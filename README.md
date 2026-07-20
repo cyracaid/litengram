@@ -4,6 +4,8 @@
 
 LitEngram 是一个面向科研工作者的 AI 驱动的文献精读框架。它将一篇论文从原始 PDF 转换为结构化的深度笔记，并同步到 **Zotero** 和 **Notion** 两个知识库。
 
+> 笔者是心理学研究者，框架偏向心理学文献（实验设计、EEG/fMRI 方法、临床样本等）。其他学科也完全可用，只是模板细节可能更贴近心理学惯例。
+
 ---
 
 ## 核心理念
@@ -55,6 +57,15 @@ export NOTION_TOKEN="ntn_你的token..."
 ### Zotero
 
 Zotero 自动使用本地的 `zotero.sqlite` 数据库，无需额外配置。
+
+### 环境变量（可选覆盖）
+
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `NOTION_TOKEN` | — | Notion Integration Token（必填以启用 Notion 同步） |
+| `LITENGRAM_CONFIG_PATH` | `~/Documents/CAD/.litengram_config.json` | Notion 页面 ID 缓存路径 |
+| `ZOTERO_DB_PATH` | `~/Zotero/zotero.sqlite` | Zotero SQLite 数据库路径 |
+| `LITENGRAM_LIBRARY_ID` | `1` | Zotero 库 ID（通常为 1） |
 
 ---
 
