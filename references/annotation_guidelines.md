@@ -6,8 +6,17 @@
 ## 核心规则
 
 ```
-有 highlight/underline → 混合模式（注释全部用户划线 + AI 补充 ~10 条）
-无 highlight/underline → AI 智能标注 ~20 条
+有 highlight/underline → 模式 A（混合）：
+  步骤 1: 对已有 annotation → SQLite UPDATE comment（安全，不动 position）
+  步骤 2: AI 补充 ~10 条 → 写入笔记 📌 关键标注 节（不创建新 PDF 高亮）
+  
+无 highlight/underline → 模式 B（纯 AI）：
+  生成 ~20 条 → 全部写入笔记 📌 关键标注 节（不创建新 PDF 高亮）
+
+> 架构约束：itemAnnotations.position 需要合法的 PDF 坐标（pageIndex + rects），
+> 这些数据只能由 Zotero 内部的 PDF 渲染引擎生成，SQLite 不可能构造合法 position。
+> 因此禁止 INSERT 新 annotation 条目到 itemAnnotations 表。
+> UPDATE 已有 annotation 的 comment 字段是安全的（不改 position）。
 ```
 
 ## 4 层标注结构
@@ -123,6 +132,24 @@
 > 批注："P 因子 (Caspi et al., 2014, *Clinical Psychological Science*) 指精神病理学的共同潜在因子——不同精神疾病共有的方差由一个潜在因子解释。本文用它论证内感受障碍与多种精神疾病相关的跨诊断性质。📘（领域共识）"
 
 ---
+
+## 📌 关键标注 节格式（嵌入笔记正文）
+
+当无法创建 PDF annotation 时，AI 标注以 Markdown 嵌入笔记正文：
+
+```markdown
+### 📌 关键标注 (AI Annotation Highlights)
+
+| # | 原文 | 区域 | 批注 |
+|---|------|------|------|
+| 1 | "...exact PDF text..." | Intro | 1️⃣定义 2️⃣本文角色 3️⃣论证关联 4️⃣批判延伸 |
+| 2 | "...exact PDF text..." | Methods | ... |
+| ... | ... | ... | ... |
+
+覆盖区域: Intro (N条) / Methods (N条) / Results (N条) / Discussion (N条)
+```
+
+每行批注按 4 层结构写——但长度控制在一段内（~80-150 字），不同于独立 PDF annotation 的不限字数版。
 
 ## Stage 4 输出小结
 

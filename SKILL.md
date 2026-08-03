@@ -52,9 +52,27 @@ LitEngram 是 **meta-skill**——主 agent 负责调度，各阶段通过 `task
 |------|------|------|------|
 | 1-2 Intake | `task()` | 论文标识（DOI / key / 标题） | 优先级 + 上下文信息 + PDF 全文 + 标注清单 |
 | 3 Analysis | `task()` | 上文产出 + `references/` | 5 维度分析文本 + 概念深挖素材 |
-| 4-5 Annotations | `task()` | 分析文本 + PDF + 标注清单 | 混合标注（写入 Zotero）+ 审稿人报告 |
+| 4-5 Annotations | `task()` | 分析文本 + PDF + 标注清单 | UPDATE 已有注释 + AI 标注表格（嵌入笔记）+ 审稿人报告 |
 | 6 Note | `task()` | 所有上文 + `references/` | 结构化笔记 Markdown |
 | 7 Sync | **主 agent 直行** | 笔记 .md + 脚本 | 本地 .md + Zotero note + Notion page |
+
+---
+
+## 局部重跑入口
+
+用户可随时对已完成论文单独重跑标注阶段（Stage 4-5-6-7）：
+
+触发词: "重新标注" / "reannotate" / "处理划线" / "加标注" / "标注这篇" + 论文标识
+
+流程:
+```
+1. 从 Zotero 获取论文 itemKey / attachmentKey / parentItemID
+2. Stage 4-5: 运行时查询当前标注数 → 动态判定模式 → 生成标注
+3. Stage 6: 更新笔记中 📌 关键标注 节
+4. Stage 7: 同步 Zotero 子笔记 + 本地 .md + Notion
+```
+
+跳过: Stage 1-2（无需重新判定优先级）和 Stage 3（已有分析文本复用）。
 
 ---
 
@@ -81,7 +99,10 @@ LitEngram 是 **meta-skill**——主 agent 负责调度，各阶段通过 `task
 
 生成混合标注（模式 A/B）并写入 Zotero，执行审稿人自审。
 
-执行 prompt 在 `references/stage_4-5_annotations.md`，须先读：
+执行 prompt 在 `references/stage_4-5_annotations.md`。主 agent 传入 attachmentKey + attachmentItemID，
+Stage 4-5 启动时自行查询 Zotero API 获取当前标注数，动态判定模式。
+
+须先读：
 - `references/annotation_guidelines.md`
 - `references/concept_excavation.md`
 - `references/reviewer_protocol.md`

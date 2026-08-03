@@ -175,6 +175,18 @@ Notion 同步是**增量**的：
 
 ---
 
+## v1.2 修复记录
+
+### v1.2 — Annotation position 字段 SQLite INSERT 卡死（已修复）
+
+修复方式: 方案 C — 放弃 SQLite INSERT 新 annotation。UPDATE 已有 comment 保留；
+AI 补充标注嵌入笔记正文 📌 关键标注 节（Markdown 表格 → Zotero HTML table）。
+
+修改文件: annotation_guidelines.md, stage_4-5_annotations.md, literature_note_template.md,
+stage_6_note.md, SKILL.md
+
+---
+
 ## 许可证
 
 MIT
