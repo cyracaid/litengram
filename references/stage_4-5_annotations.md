@@ -23,6 +23,47 @@ curl -s "http://127.0.0.1:23119/api/users/0/items/{attachmentKey}/children?itemT
 - `count > 0` → 模式 A（混合）：标注已有 annotation + AI 补充嵌入笔记
 - `count === 0` → 模式 B（纯 AI）：全部 AI 标注嵌入笔记
 
+**Fallback 机制**：
+
+```python
+import sqlite3, os, json, urllib.request
+
+def get_annotation_count(attachment_key, attachment_item_id):
+    """Try Zotero API, fall back to SQLite on failure."""
+    # Try 1: Zotero API
+    try:
+        url = f"http://127.0.0.1:23119/api/users/0/items/{attachment_key}/children?itemType=annotation"
+        req = urllib.request.Request(url)
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = json.loads(resp.read())
+            annotations = [x for x in data if x["data"].get("itemType") == "annotation"]
+            return len(annotations), annotations
+    except Exception as e:
+        print(f"[LitEngram] Zotero API failed: {e}. Falling back to SQLite...")
+    
+    # Try 2: SQLite
+    try:
+        db_path = os.path.expanduser("~/Zotero/zotero.sqlite")
+        conn = sqlite3.connect(db_path)
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT COUNT(*), ia.itemID, ia.text, ia.comment "
+            "FROM itemAnnotations ia WHERE ia.parentItemID=?",
+            (attachment_item_id,)
+        )
+        rows = cur.fetchall()
+        conn.close()
+        count = rows[0][0] if rows else 0
+        return count, rows
+    except Exception as e2:
+        print(f"[LitEngram] SQLite also failed: {e2}")
+        return 0, []
+```
+
+- 成功: 使用 API 返回的标注列表
+- API 失败且 SQLite OK: 使用 SQLite 数据
+- 两者都失败: 默认 Mode B，不阻塞流程
+
 同时通过 SQLite 查询已有 annotation 的 itemID 和当前 comment 状态：
 
 ```sql
@@ -53,6 +94,45 @@ UPDATE itemAnnotations SET comment = '{4层批注}' WHERE itemID = {annotationIt
 - 对每条用户 highlight/underline 按 4 层结构写批注（定义+溯源 / 本文角色 / 论证关联 / 批判延伸）
 - 若标注原文含关键术语，第 1 层按 concept_excavation.md 的 9 层规格展开
 - 存在易混概念时做并排辨析表（写在 comment 里）
+
+**步骤 1b：质量校验**
+
+每写完一批 comment，执行 SQL 自检：
+
+```sql
+SELECT 
+  itemID,
+  CASE 
+    WHEN comment IS NULL OR length(comment) < 50 THEN 'FAIL — 过短或空'
+    WHEN comment NOT LIKE '%定义%' AND comment NOT LIKE '%溯源%' AND comment NOT LIKE '%本文角色%' THEN 'WARN — 缺定义/溯源/角色层'
+    ELSE 'OK'
+  END AS quality_flag
+FROM itemAnnotations 
+WHERE parentItemID = {attachmentID}
+  AND comment IS NOT NULL
+ORDER BY quality_flag DESC;
+```
+
+质量标准：
+- 长度 ≥ 50 字符
+- 至少包含以下 3 层中的 2 层标记：【定义】/【溯源】/【本文角色】
+
+FAIL → 重写该条 comment。
+WARN → 标注为待审阅，在输出中列出。
+
+返回时在 JSON 中新增 quality_check 字段：
+
+```json
+{
+  "quality_check": {
+    "total": 38,
+    "pass": 36,
+    "warn": 2,
+    "fail": 0,
+    "fail_ids": []
+  }
+}
+```
 
 **步骤 2：AI 补充 ~10 条 → 生成 📌 关键标注 Markdown 表格**
 

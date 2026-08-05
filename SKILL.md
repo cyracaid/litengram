@@ -35,6 +35,7 @@ LitEngram 是 **meta-skill**——主 agent 负责调度，各阶段通过 `task
 用户请求
   ↓
 主 agent (你) ← 加载 SKILL.md
+  ├─ task(stage_0_dedup)       ← 查重：是否已处理过？
   ├─ task(stage_1-2_intake)    ← 优先级 + 上下文 + 获取全文
   ├─ task(stage_3_analysis)     ← 5 维度解剖 + 概念深挖素材收集
   ├─ task(stage_4-5_annotations) ← 混合标注 + 审稿人自审
@@ -50,6 +51,7 @@ LitEngram 是 **meta-skill**——主 agent 负责调度，各阶段通过 `task
 
 | 阶段 | 方式 | 输入 | 产出 |
 |------|------|------|------|
+| 0 Dedup | `task()` | 论文标识 | 查重结果（new / duplicate / partial）|
 | 1-2 Intake | `task()` | 论文标识（DOI / key / 标题） | 优先级 + 上下文信息 + PDF 全文 + 标注清单 |
 | 3 Analysis | `task()` | 上文产出 + `references/` | 5 维度分析文本 + 概念深挖素材 |
 | 4-5 Annotations | `task()` | 分析文本 + PDF + 标注清单 | UPDATE 已有注释 + AI 标注表格（嵌入笔记）+ 审稿人报告 |
@@ -76,7 +78,35 @@ LitEngram 是 **meta-skill**——主 agent 负责调度，各阶段通过 `task
 
 ---
 
+## 跨论文聚合入口
+
+用户可随时对已处理的所有论文进行跨论文知识合成：
+
+触发词: "综合" / "synthesize" / "聚合" / "我读的这几篇" / "知识合成" / "cross-paper"
+
+流程:
+```
+1. 扫描 litreview/*.md 所有笔记
+2. 提取每篇的: 重要等级 / 知识缺口 / 战略嫁接 / 行动计划
+3. 生成合成报告: 共享缺口 + 方法嫁接矩阵 + 发现张力 + 共享行动项
+4. 输出为 Markdown 报告，保存到 litreview/_synthesis_YYYY-MM-DD.md
+5. 可选: 同步到 Notion "每日读读文献"
+```
+
+实现脚本: `scripts/synthesize_notes.py`
+
+---
+
 ## 各阶段 Prompt 模板
+
+### Stage 0: Dedup Check（查重）
+
+在新论文进入完整管线前，先检查是否已处理过，避免重复跑覆盖旧笔记。
+
+执行 prompt 在 `references/stage_0_dedup.md`。
+
+若结果为 duplicate → 告知用户，提供选项（跳过 / 重新处理 / 仅重跑某阶段）。
+若结果为 new → 正常进入 Stage 1-2。
 
 ### Stage 1-2: Intake（优先级 + 上下文 + 获取全文）
 
@@ -151,6 +181,7 @@ ns.sync_note(title=..., markdown_content=..., date_str="...", skip_if_exists=Fal
 
 | 文件 | 内容 | 被谁读 |
 |------|------|--------|
+| `references/stage_0_dedup.md` | Stage 0 查重 task prompt | task 调度 |
 | `references/paper_priority.md` | 论文类型七分类、重要等级、阅读策略 | Stage 1-2 |
 | `references/research_profile_template.md` | 研究上下文模板 | Stage 1-2 |
 | `references/zotero_workflow.md` | Zotero API/SQLite 技术细节 | Stage 1-2, 7 |
@@ -178,6 +209,7 @@ litengram/
     zotero_sync.py            ← Zotero SQLite 写入
   references/
     (原分析指南)               ← 各阶段详细规格
+    stage_0_dedup.md          ← task prompt 模板
     stage_1-2_intake.md       ← task prompt 模板
     stage_3_analysis.md       ← task prompt 模板
     stage_4-5_annotations.md  ← task prompt 模板

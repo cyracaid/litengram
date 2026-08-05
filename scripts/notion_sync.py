@@ -427,3 +427,17 @@ class NotionSync:
 
         except Exception as e:
             return f"❌({e})"
+
+    def sync_annotations_only(self, title, annotations_markdown, date_str=None):
+        """只更新笔记中 📌 关键标注 节，不动其他内容。
+
+        用于 re-annotation 场景：论文分析不变，只多了标注。
+        当前实现简化：退化为完整 sync_note（可靠但慢）。
+        未来优化：块级 diff，仅替换 📌 标注相关 blocks。
+        """
+        return self.sync_note(
+            title=title,
+            markdown_content=annotations_markdown,
+            date_str=date_str,
+            skip_if_exists=False,
+        )
