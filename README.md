@@ -61,6 +61,8 @@ Zotero 自动使用本地的 `zotero.sqlite` 数据库，无需额外配置。
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
 | `NOTION_TOKEN` | — | Notion Integration Token（必填以启用 Notion 同步） |
+| `ZOTERO_API_KEY` | — | Zotero Web API Key（可选——启用后可从云端下载缺失 PDF） |
+| `ZOTERO_USER_ID` | `11261922` | Zotero 用户 ID（配合 API Key 使用） |
 | `LITENGRAM_CONFIG_PATH` | `~/Documents/CAD/.litengram_config.json` | Notion 页面 ID 缓存路径 |
 | `ZOTERO_DB_PATH` | `~/Zotero/zotero.sqlite` | Zotero SQLite 数据库路径 |
 | `LITENGRAM_LIBRARY_ID` | `1` | Zotero 库 ID（通常为 1） |

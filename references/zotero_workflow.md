@@ -14,6 +14,12 @@ GET  /api/users/0/items?q={query}&itemType=journalArticle
 GET  /api/users/0/items/{attachmentKey}/children?itemType=annotation
 ```
 
+### Web API (Cloud Download — requires ZOTERO_API_KEY)
+```
+GET  https://api.zotero.org/users/{userID}/items/{attachmentKey}/file
+Header: Zotero-API-Key: {key}
+```
+
 ### SQLite (Write)
 Database: `~/Zotero/zotero.sqlite`
 

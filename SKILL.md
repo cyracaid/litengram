@@ -13,6 +13,7 @@ description: >-
   不触发：一般性文献查询、简单摘要、翻译请求。
 compatibility:
   - Zotero Local API (http://127.0.0.1:23119/api/)
+  - Zotero Web API (https://api.zotero.org/) — 用于云端下载缺失 PDF
   - SQLite (~/Zotero/zotero.sqlite)
 ---
 

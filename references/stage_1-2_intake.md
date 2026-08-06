@@ -31,23 +31,21 @@ curl -s "http://127.0.0.1:23119/api/users/0/items/{attachmentKey}"
 # 从 Location header 获取文件路径（Zotero 返回 302 redirect）
 ```
 
-**步骤 2b: 检查 PDF 可用性**
+**步骤 2b: 确保 PDF 本地可用**
 
 ```python
-import os
-from pathlib import Path
+from scripts.zotero_cloud import ensure_local_pdf
 
-pdf_path = Path("~/Zotero/storage/{key}/{filename}.pdf").expanduser()
-
-if pdf_path.exists():
-    status = "available"
-elif pdf_path.parent.exists():
-    # storage dir exists but file missing — Zotero metadata corruption
-    status = "missing"
-else:
-    # storage dir doesn't exist — never downloaded
-    status = "not_imported"
+pdf_path, status = ensure_local_pdf(
+    attachment_key="{attachmentKey}",
+    storage_dir="~/Zotero/storage/{attachmentKey}"
+)
+# status: 'available' (本地已有) / 'downloaded' (刚从云端拉取) / 'unavailable' (云端也没)
 ```
+
+- `available`: 本地已有，直接读
+- `downloaded`: 刚从 Zotero 云端下载成功
+- `unavailable`: ZOTERO_API_KEY 未设 或 云端没有 → 标记 PDF 不可用
 
 **步骤 2c: 获取 PDF 文本**
 
