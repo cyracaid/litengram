@@ -32,9 +32,32 @@
 - 用途标签
 - 读前定位 4 问
 
-### 4. （可选）上下文注入
+### 4. 解析目标目录（Zotero Collection → litreview 路径）
 
-如果 `research_profile.md` 存在，载入上下文。所有后续分析须落到具体研究项目上。
+从 Zotero API 返回的 paper 条目中提取 `data.collections`（collection key 数组）。对每个 key 查 collection 名称：
+
+```bash
+curl -s "http://127.0.0.1:23119/api/users/0/collections/{collectionKey}"
+```
+
+将 collection name 与 `.litengram_config.json` 中的 `project_dirs` 映射表匹配：
+
+```json
+{
+  "project_dirs": {
+    "CAD": "~/Documents/CAD",
+    "James Gross": "~/Documents/James Gross"
+  }
+}
+```
+
+- 匹配成功 → `litreview_dir = {project_dir}/litreview/`（不存在则 mkdir）
+- 论文在多个 collection → 取第一个匹配的
+- 无匹配 → 默认 `~/Documents/CAD/litreview/`
+
+### 5. （可选）上下文注入
+
+如果 `{litreview_dir}/../research_profile.md` 存在，载入上下文。所有后续分析须落到具体研究项目上。
 
 ## 输出
 
@@ -43,7 +66,14 @@
 ```json
 {
   "paper": {"type": "", "level": "", "strategy": "", "tags": []},
-  "zotero": {"parent_item_id": 0, "pdf_path": "", "annotation_count": 0, "mode": "A/B"},
+  "zotero": {
+    "parent_item_id": 0,
+    "pdf_path": "",
+    "annotation_count": 0,
+    "mode": "A/B",
+    "collection_name": "James Gross"
+  },
+  "litreview_dir": "~/Documents/James Gross/litreview",
   "context_notes": "研究上下文摘要",
   "full_text_summary": "PDF 全文关键段落摘要（便于下游分析）"
 }

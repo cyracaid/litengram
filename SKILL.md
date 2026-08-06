@@ -52,7 +52,7 @@ LitEngram 是 **meta-skill**——主 agent 负责调度，各阶段通过 `task
 | 阶段 | 方式 | 输入 | 产出 |
 |------|------|------|------|
 | 0 Dedup | `task()` | 论文标识 | 查重结果（new / duplicate / partial）|
-| 1-2 Intake | `task()` | 论文标识（DOI / key / 标题） | 优先级 + 上下文信息 + PDF 全文 + 标注清单 |
+| 1-2 Intake | `task()` | 论文标识（DOI / key / 标题） | 优先级 + 上下文 + PDF 全文 + 标注清单 + litreview_dir |
 | 3 Analysis | `task()` | 上文产出 + `references/` | 5 维度分析文本 + 概念深挖素材 |
 | 4-5 Annotations | `task()` | 分析文本 + PDF + 标注清单 | UPDATE 已有注释 + AI 标注表格（嵌入笔记）+ 审稿人报告 |
 | 6 Note | `task()` | 所有上文 + `references/` | 结构化笔记 Markdown |
@@ -153,7 +153,9 @@ Stage 4-5 启动时自行查询 Zotero API 获取当前标注数，动态判定�
 
 ### 7a. 本地 .md
 
-写入 `litreview/{AuthorYear_ShortTitle}.md`。
+写入 `{litreview_dir}/{AuthorYear_ShortTitle}.md`。
+
+`litreview_dir` 由 Stage 1-2 从 Zotero collection 自动解析并传入。默认值为 `~/Documents/CAD/litreview/`。
 
 ### 7b. Zotero
 
