@@ -16,12 +16,54 @@
 
 ### 2. 获取全文 + 已有标注
 
-通过 Zotero 定位论文并提取 PDF，检查已有标注数量作为初步标记：
-- `annotations > 0` → 初步标记为"有划线"（最终模式由 Stage 4-5 运行时动态判定）
-- `annotations === 0` → 初步标记为"无划线"
+通过 Zotero 定位论文并提取 PDF。
 
-> 注：此标记仅供 Stage 3 分析时了解上下文。Stage 4-5 启动时会重新查询当前标注数，
-> 因此用户在 Stage 1-3 期间新增的划线不会被遗漏。
+**步骤 2a: 定位 PDF 文件**
+
+从 Zotero API 获取 attachment，解析 storage 路径：
+
+```bash
+# 1. 找到 attachment key
+curl -s "http://127.0.0.1:23119/api/users/0/items/{itemKey}/children"
+
+# 2. 获取 attachment 详情
+curl -s "http://127.0.0.1:23119/api/users/0/items/{attachmentKey}"
+# 从 Location header 获取文件路径（Zotero 返回 302 redirect）
+```
+
+**步骤 2b: 检查 PDF 可用性**
+
+```python
+import os
+from pathlib import Path
+
+pdf_path = Path("~/Zotero/storage/{key}/{filename}.pdf").expanduser()
+
+if pdf_path.exists():
+    status = "available"
+elif pdf_path.parent.exists():
+    # storage dir exists but file missing — Zotero metadata corruption
+    status = "missing"
+else:
+    # storage dir doesn't exist — never downloaded
+    status = "not_imported"
+```
+
+**步骤 2c: 获取 PDF 文本**
+
+- `status == "available"`: 用 PyMuPDF / pdfminer 提取全文
+- `status != "available"`: 标记 PDF 不可用，后续 Stage 降级处理
+
+**步骤 2d: 检查已有标注数量**
+
+```bash
+curl -s "http://127.0.0.1:23119/api/users/0/items/{attachmentKey}/children?itemType=annotation"
+```
+
+- `count > 0` → 初步标记为"有划线"（最终模式由 Stage 4-5 运行时动态判定）
+- `count === 0` → 初步标记为"无划线"
+
+> 注：Stage 4-5 启动时会重新查询当前标注数，用户在 Stage 1-3 期间新增的划线不会被遗漏。
 
 ### 3. 优先级判定
 
@@ -69,6 +111,7 @@ curl -s "http://127.0.0.1:23119/api/users/0/collections/{collectionKey}"
   "zotero": {
     "parent_item_id": 0,
     "pdf_path": "",
+    "pdf_status": "available / missing / not_imported",
     "annotation_count": 0,
     "mode": "A/B",
     "collection_name": "James Gross"
