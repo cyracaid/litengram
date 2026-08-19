@@ -302,20 +302,26 @@ paper_priority.md, reviewer_protocol.md, stage_1-2_intake.md, stage_6_note.md
 
 ---
 
-### 批量导入候选清单（收件，非精读）
+### arXiv 批量导入：已知 issue 与解决办法（实测 2026-08-19）
 
-文献扫描产出的候选 arXiv 清单可用 `zotero_add_batch_2608NLP.py`（在项目 `literature/` 目录）
-一键导入 Zotero 指定 collection：
+`zotero_add_batch_2608NLP.py`（项目 `literature/` 目录）原本想一键批量导入 35+ 篇候选，实测撞上 arXiv API 限流，改用**逐篇收件**。
 
-```bash
-python3 zotero_add_batch_2608NLP.py --collection 2608NLP --dry-run   # 预览
-python3 zotero_add_batch_2608NLP.py --collection 2608NLP             # 真实导入
-```
+**Issue（实测）：**
+- 批量脚本元数据抓取走 `http://export.arxiv.org/api/query` → 连续请求触发 arXiv **429 Too Many Requests**，且数据中心/共享 IP 出口惩罚更狠
+- 混合出现 **Read timed out**（连接建立但响应饿死）：429 与 timeout 都会在批量场景爆发
+- 云端沙箱 egress 直接挡 `export.arxiv.org`，无法做元数据抓取代理
+- 脚本对 `requests.get` 的 `timeout` 异常分支**没有重试**（只对 429/5xx 退避），timeout 会直接放弃单篇 —— 这是原脚本 bug
 
-- 元数据抓取走 `export.arxiv.org`，**必须在你本机（能连外网）终端跑**；云端沙箱 egress 挡该 host
-- 导入的是**收件箱**（inbox），全部条目 `❓未核实` —— 不等同于精读笔记
-- 精读仍是 LitEngram 逐篇管线：从 collection 取一篇 → Stage 0-7 → 单独成笔记
-- README 顶部"一次只读一篇"不变：批量导入只是把候选归拢进 Zotero，Depth 精读依旧逐篇
+**解决办法（采用，逐篇）：**
+1. **弃批量、走逐篇**：litengram 本就是单篇管线，批量导入多余。每篇单独处理，限流概率大降
+2. **PDF 用 `/pdf/` 端点，不用 `/api/query`**（实测关键）：
+   - ❌ `https://export.arxiv.org/api/query?id_list={id}` → 限流 429（元数据/abstract 端点）
+   - ✅ `https://export.arxiv.org/pdf/{id}` → HTTP 200，直接下 PDF 全文（不含 abstract，但 litengram 的摘要从 Zotero abstractNote 读，可后续补）
+3. **PDF 落点**：先存 `~/Documents/CAD/2608NLP/pdf-inbox/{arxivId}.pdf`，精读后按 collection → `2608NLP/litreview/` 归置
+4. 单篇连发仍 429 时，等 5-10 分钟再下；已下载的跳过（`pdf-inbox/` 去重）
+5. 元数据（title/authors/date）精读时从 arXiv 或页面补全，或手动核对 LITSCAN 清单
+
+（注：脚本若保留批量用法，需给 timeout 分支加重试 + 拉长间隔；当前项目已不依赖批量路径。）
 
 ---
 
