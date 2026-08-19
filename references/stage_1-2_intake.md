@@ -31,6 +31,23 @@ curl -s "http://127.0.0.1:23119/api/users/0/items/{attachmentKey}"
 # 从 Location header 获取文件路径（Zotero 返回 302 redirect）
 ```
 
+**步骤 2a-alt: arXiv 直抓（无 Zotero / 输入为 arXiv ID 时）**
+
+输入为 arXiv ID（`2401.12345`）或 arXiv URL 时，跳过 Zotero 定位，直接抓 arXiv：
+
+```bash
+# 1. 查元数据（title / abstract / pdf 链接）
+curl -s "https://export.arxiv.org/api/query?id_list={arxiv_id}"
+
+# 2. 下载 PDF 到收件箱
+mkdir -p "~/Zotero/pdf-inbox"
+curl -L -o "~/Zotero/pdf-inbox/{arxiv_id}.pdf" "https://export.arxiv.org/pdf/{arxiv_id}"
+```
+
+- 论文标记 `not_imported`（无 Zotero 条目，Stage 7b 同步跳过）
+- 无已有标注 → `annotation_count = 0`
+- 下载失败 → `pdf_status = "missing"`
+
 **步骤 2b: 确保 PDF 本地可用**
 
 ```python
@@ -46,10 +63,11 @@ pdf_path, status = ensure_local_pdf(
 - `available`: 本地已有，直接读
 - `downloaded`: 刚从 Zotero 云端下载成功
 - `unavailable`: ZOTERO_API_KEY 未设 或 云端没有 → 标记 PDF 不可用
+- arXiv 直抓路径（2a-alt）: `pdf_status = "not_imported"`，PDF 已在收件箱
 
 **步骤 2c: 获取 PDF 文本**
 
-- `status == "available"`: 用 PyMuPDF / pdfminer 提取全文
+- `status == "available"` 或 arXiv 直抓成功: 用 PyMuPDF / pdfminer 提取全文
 - `status != "available"`: 标记 PDF 不可用，后续 Stage 降级处理
 
 **步骤 2d: 检查已有标注数量**
@@ -105,7 +123,7 @@ curl -s "http://127.0.0.1:23119/api/users/0/collections/{collectionKey}"
 
 ```json
 {
-  "paper": {"type": "", "level": "", "strategy": "", "tags": []},
+  "paper": {"type": "", "level": "", "strategy": "", "tags": [], "domain": "psych / nlp / hybrid / review-theory"},
   "zotero": {
     "parent_item_id": 0,
     "pdf_path": "",

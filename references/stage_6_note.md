@@ -13,12 +13,12 @@
 
 ### 1. 读参考文件
 
-- `references/literature_note_template.md` — 10 部分结构 + 📎 关键引用 + 结构门禁 checklist + 输出兼容层规则
+- `references/literature_note_template.md` — 12 部分结构 + 📎 关键引用 + 结构门禁 checklist + 输出兼容层规则
 - `references/concept_excavation.md` — 9 层深挖规格
 
 ### 2. 合成笔记
 
-按模板 11 部分填充。概念深挖用 `####` 四级标题 + 平铺格式（禁止 `>` 引用块包裹）。
+按模板 12 部分填充（方法节按 Stage 1-2 传来的 `paper.domain` 选模板：psych 版 / nlp 版 / hybrid 双版全量）。概念深挖用 `####` 四级标题 + 平铺格式（禁止 `>` 引用块包裹）。
 
 摘要从 Zotero 的 `abstractNote` 读取，不做改写。
 

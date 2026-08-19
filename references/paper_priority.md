@@ -3,21 +3,23 @@
 > 用途：论文分级、类型分类、用途标签和阅读策略选择。
 > 阅读阶段：Stage 0 · Intake 时必读。
 
-## 论文类型七分类
+## 论文类型九分类
 
 每篇论文先判定类型，这影响方法论拆解策略：
 
-| 类型 | 英文 | 含义 |
-|------|------|------|
-| 🧪 实证 | Empirical | 有实验/数据收集的原创研究 |
-| 📐 方法 | Methods | 提出新方法/工具/范式 |
-| 🧠 理论 | Theory | 提出理论框架或概念模型 |
-| 📚 综述 | Review | 系统/叙述性综述 |
-| 📏 基准 | Benchmark | 数据集/指标/竞赛基线 |
-| 🔄 复现 | Replication | 重复/验证已有发现 |
-| 🗣️ 观点 | Position | 立场文/评论/观点 |
+| 类型 | 英文 | 含义 | 建议 domain |
+|------|------|------|------|
+| 🧪 实证 | Empirical | 有实验/数据收集的原创研究 | 看信号（被试→psych / 模型指标→nlp / 都有→hybrid）|
+| 📐 方法 | Methods | 提出新方法/工具/范式 | 看信号 |
+| 🧠 理论 | Theory | 提出理论框架或概念模型 | review-theory |
+| 📚 综述 | Review | 系统/叙述性综述 | review-theory |
+| 📏 基准 | Benchmark | 数据集/指标/竞赛基线 | nlp（psych 行为数据库除外）|
+| 🔄 复现 | Replication | 重复/验证已有发现 | 跟随原论文 |
+| 🗣️ 观点 | Position | 立场文/评论/观点 | review-theory |
+| 🗂️ 资源 | Dataset/Resource | 新数据集/语料库/标注资源（ACL/NLP 常见）| nlp |
+| 🖥️ 系统 | System | 工程系统/工具/平台论文（ACL System 类）| nlp |
 
-> 类型决定维度 2 的策略：Empirical / Methods / Benchmark 走方法论三层拆解；Review / Theory / Position 走论证结构拆解（主张链条→证据类型→推理跳跃点）。
+> 类型决定维度 2 的策略：Empirical / Methods / Benchmark / Dataset / System 走方法论三层拆解；Review / Theory / Position 走论证结构拆解（主张链条→证据类型→推理跳跃点）。domain 决定维度 2 跑哪个 checklist（psych / nlp / hybrid 双跑），详见 literature_analysis_framework.md。
 
 ## 重要等级标准
 
