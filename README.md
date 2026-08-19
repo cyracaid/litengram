@@ -56,15 +56,21 @@ export NOTION_TOKEN="ntn_你的token..."
 
 Zotero 自动使用本地的 `zotero.sqlite` 数据库，无需额外配置。
 
+> ⚠️ **使用前先同步（刷新）**：LitEngram 的部分写入走本地 SQLite（`synced=0`），
+> 或依赖云端条目/附件。**每次开始前先在 Zotero 客户端点一次同步**，
+> 确保本地库与云端一致，避免旧状态导致重复条目、附件缺失或同步冲突。
+> 脚本写入后同样建议再同步一次，把新条目/标注推到云端。
+
 ### 环境变量（可选覆盖）
 
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
 | `NOTION_TOKEN` | — | Notion Integration Token（必填以启用 Notion 同步） |
-| `ZOTERO_API_KEY` | — | Zotero Web API Key（可选——启用后可从云端下载缺失 PDF） |
+| `ZOTERO_API_KEY` | — | Zotero Web API Key（上传 PDF 附件 / 云端下载缺失 PDF 必需） |
 | `ZOTERO_USER_ID` | `11261922` | Zotero 用户 ID（配合 API Key 使用） |
 | `LITENGRAM_CONFIG_PATH` | `~/Documents/CAD/.litengram_config.json` | Notion 页面 ID 缓存路径 |
 | `ZOTERO_DB_PATH` | `~/Zotero/zotero.sqlite` | Zotero SQLite 数据库路径 |
+| `LITENGRAM_PDF_INBOX` | `~/Zotero/pdf-inbox/` | PDF 下载落点（云端下载/手动模式） |
 | `LITENGRAM_LIBRARY_ID` | `1` | Zotero 库 ID（通常为 1） |
 
 ---
@@ -92,7 +98,21 @@ from scripts.notion_sync import NotionSync
 ns = NotionSync()
 ns.resolve_page_id()
 ns.sync_note(title="论文标题", markdown_content="...", date_str="2026-07-20")
+
+# DOI → Zotero 条目 → PDF 附件 上传（Web API，需 ZOTERO_API_KEY）
+# 先从 Zotero 客户端同步一次，再执行：
+python3 scripts/zotero_upload.py --doi 10.1093/scan/nsaf102 --pdf /tmp/paper.pdf --collection CAD
+# 或挂在已有条目下：
+python3 scripts/zotero_upload.py --item-key 9BKZ3QUE --pdf /tmp/paper.pdf
+
+# 手动模式（推荐：上传慢 / WebDAV 限流时）：只下载 PDF 到 inbox + 打印拖入指引
+python3 scripts/zotero_upload.py --manual --doi 10.1093/scan/nsaf102
+python3 scripts/zotero_upload.py --manual --item-key 9BKZ3QUE
 ```
+
+> 首次使用前先同步 Zotero（右上角旋转箭头），脚本执行后也建议再同步一次。
+> PDF 下载默认落在 `~/Zotero/pdf-inbox/`（`LITENGRAM_PDF_INBOX` 可改）。
+> 手动模式打印文件路径与拖入指引，PDF 拖进 Zotero 后由客户端自行同步。
 
 ---
 
@@ -137,7 +157,9 @@ litengram/
 ├── .gitignore
 ├── scripts/
 │   ├── notion_sync.py            # Notion API 同步（增量更新，幂等）
-│   └── zotero_sync.py            # Zotero SQLite 写入（XHTML 转换）
+│   ├── zotero_sync.py            # Zotero SQLite 写入（XHTML 转换）
+│   ├── zotero_cloud.py           # 云端 PDF 下载 → inbox + 手动挂载指引
+│   └── zotero_upload.py          # Zotero Web API 上传（DOI→条目→PDF 附件 / --manual）
 └── references/
     ├── stage_1-2_intake.md       # Intake 阶段 task prompt
     ├── stage_3_analysis.md       # 分析阶段 task prompt
@@ -186,6 +208,53 @@ AI 补充标注嵌入笔记正文 📌 关键标注 节（Markdown 表格 → Zo
 
 修改文件: annotation_guidelines.md, stage_4-5_annotations.md, literature_note_template.md,
 stage_6_note.md, SKILL.md
+
+---
+
+## v1.3 修复记录
+
+### v1.3 — Zotero key 生成 bug（重大） + Web API 上传脚本
+
+**根因**：`zotero_sync.py` 和 `zotero_workflow.md` 用 `secrets.token_hex(6)`
+生成 12 位小写 hex key —— Zotero 服务器拒绝（`400 'KEY' is not a valid item key`，
+key 必须 8 位 `[2-9A-NP-Z]`，不含 0/1/O），导致新增条目/标注永远无法同步。
+
+修复：
+- `scripts/zotero_sync.py`：key 生成改为 `zotero_key()`（8 位 `[2-9A-NP-Z]`）
+- `references/zotero_workflow.md`：修正 key 生成文档 + 新增「八、Web API 上传完整流程」
+- `scripts/zotero_upload.py`：**新增** —— DOI → 条目 → PDF 附件一键上传（Web API v3）
+- `README.md`：新增「使用前先同步」提示
+
+**上传流程关键坑**（已验证）：
+- 附件创建时**不能带 md5/mtime**，否则上传授权 412 "file exists"
+- 上传授权必须 form-urlencoded + `If-None-Match: *`，`mtime` 用毫秒
+- S3 POST 字段顺序：`key` 第一个、`file` 最后
+
+修改文件: scripts/zotero_sync.py, scripts/zotero_upload.py,
+references/zotero_workflow.md, README.md
+
+---
+
+## v1.4 修复记录
+
+### v1.4 — PDF inbox + 手动挂载模式
+
+新增：
+- `scripts/zotero_cloud.py`：PDF 下载落点统一到 inbox
+  （`LITENGRAM_PDF_INBOX` 优先，默认 `~/Zotero/pdf-inbox/`），
+  下载成功打印路径 + 打开目录 + 手动挂载指引
+- `scripts/zotero_upload.py`：新增 `--manual` —— 只下载 PDF 到 inbox，
+  打印拖入 Zotero 指引，不做 Web API 上传（WebDAV 限流/上传慢时的推荐路径）
+- `scripts/zotero_upload.py`：**WebDAV 模式守卫** —— 自动上传检测到客户端
+  `storage.protocol=webdav` 时拒绝执行并提示 `--manual`（WebDAV 客户端拉不到
+  S3 文件会成孤儿附件），`--force` 可覆盖
+- 失败输出统一为 `✗ 步骤: 原因: 处理:`，不再裸 traceback
+
+动机：Web API 上传慢 + 坚果云 WebDAV 503 限流（见 docs/issues/2026-08-13-jianguoyun-webdav-503.md），
+手动拖 PDF 由 Zotero 客户端自己同步，绕开 API 与限流。
+
+修改文件: scripts/zotero_cloud.py, scripts/zotero_upload.py,
+references/zotero_workflow.md, README.md
 
 ---
 

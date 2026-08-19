@@ -1,13 +1,27 @@
-"""Zotero sync for LitEngram v1.2 — write notes as Zotero-safe HTML."""
+"""Zotero sync for LitEngram v1.2 — write notes as Zotero-safe HTML.
 
+NOTE: SQLite inserts create items with synced=0. The Zotero client uploads
+them on the next sync, so run a sync (or ask the user to) after writing.
+Keys are generated as 8-char [2-9A-NP-Z] — Zotero rejects 0/1/O and
+lowercase hex keys (server 400 'not a valid item key').
+"""
+
+import random
 import re
-import secrets
 import sqlite3
 import os
 from pathlib import Path
 
 ZOTERO_DB = Path(os.environ.get("ZOTERO_DB_PATH", str(Path.home() / "Zotero/zotero.sqlite")))
 LIBRARY_ID = int(os.environ.get("LITENGRAM_LIBRARY_ID", "1"))
+
+# Zotero's allowed key charset: digits 2-9 + A-Z minus O (no 0, 1, O)
+_KEY_CHARS = "23456789ABCDEFGHIJKLMNPQRSTUVWXYZ"
+
+
+def zotero_key():
+    """Generate a valid 8-char Zotero item key."""
+    return "".join(random.choice(_KEY_CHARS) for _ in range(8))
 
 
 def md_to_zotero_html(md_text):
@@ -213,7 +227,7 @@ def _create_note(cur, parent_item_id, html_content):
     cur.execute("SELECT MAX(itemID) FROM items")
     max_id = cur.fetchone()[0] or 0
     new_id = max_id + 1
-    key = secrets.token_hex(6)
+    key = zotero_key()
 
     cur.execute(
         "INSERT INTO items (itemID, itemTypeID, key, dateAdded, dateModified, libraryID) "

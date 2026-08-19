@@ -120,6 +120,20 @@ VALUES ({newItemID}, {parentItemID}, '<h2>笔记标题</h2><p>笔记内容</p>')
 ```
 
 > key 生成：`import secrets; secrets.token_hex(6)` 生成 12 位十六进制字符串。
+> ⚠️ **v1.3 修正（重大）**：`token_hex(6)` 生成的 key **非法**！
+> Zotero item key 必须是 8 位，字符集 `[2-9A-NP-Z]`（排除 0、1、O）。
+> 12 位小写 hex 或含 0/1/O 的 key，客户端同步会被服务器拒
+> （`Error 400 ... 'KEY' is not a valid item key`）。
+> 正确生成：
+> ```python
+> import random
+> _KEY_CHARS = "23456789ABCDEFGHIJKLMNPQRSTUVWXYZ"
+> key = "".join(random.choice(_KEY_CHARS) for _ in range(8))
+> ```
+> 或直接用 `scripts/zotero_sync.py` 的 `zotero_key()`。
+>
+> 另注：SQLite 直插的条目 `synced=0`，需用户手动点同步（或 `open -a Zotero`
+> 后等客户端自动同步）才会推到云端。写入后记得提示用户同步。
 
 ### 五、安全流程
 
@@ -151,7 +165,11 @@ VALUES ({newItemID}, {parentItemID}, '<h2>笔记标题</h2><p>笔记内容</p>')
 | 阅读笔记 (.md) | `CAD/litreview/{AuthorYear_ShortTitle}.md` | 本地副本（可选） |
 | Zotero 子笔记 | Zotero 条目库 (API/SQLite) | 权威版本 |
 | Zotero 标注批注 | Zotero PDF 附件 | 绑定到具体高亮/下划线 |
+| PDF 下载暂存 | `~/Zotero/pdf-inbox/` | 云端下载的 PDF 落点（`LITENGRAM_PDF_INBOX` 可覆盖） |
 | 本工作流文档 | `references/zotero_workflow.md` | 当前文件 |
+
+> PDF 下载落点：`LITENGRAM_PDF_INBOX` 设置时用该目录，否则默认
+> `~/Zotero/pdf-inbox/`。下载成功会打印路径 + 手动拖入指引。
 
 ### 七、技术备忘
 
@@ -163,3 +181,100 @@ VALUES ({newItemID}, {parentItemID}, '<h2>笔记标题</h2><p>笔记内容</p>')
   - `items` 表无 `parentItemID` 列（Zotero 6 有）— 父关系通过 `itemNotes`/`itemAnnotations` 表建立
   - note 的 `itemTypeID` 为 **28**（非旧版 14）
   - 写入后需重启 Zotero 才可通过 API 读取到新数据
+
+---
+
+## 八、Web API 上传完整流程（DOI → 条目 → PDF 附件）— v1.3
+
+> 场景：论文条目已有（或需新建）但本地无 PDF，或 PDF 在云端缺失。
+> 优先用现成脚本：`python3 scripts/zotero_upload.py --doi <DOI> --pdf <path> [--collection <名>]`
+> 或 `--item-key <key>` 跳过 DOI 查找。下面是人肉/调试版步骤。
+
+### 手动模式（推荐：慢速/限流时）
+
+Web API 上传慢或坚果云 503 限流时，用 `--manual` 只下载 PDF 到
+inbox（`LITENGRAM_PDF_INBOX` 或 `~/Zotero/pdf-inbox/`），然后手动拖入 Zotero：
+
+```
+python3 scripts/zotero_upload.py --manual --doi <DOI>
+python3 scripts/zotero_upload.py --manual --item-key <itemKey>
+```
+
+脚本打印 PDF 路径 + 打开目录命令 + 拖入指引。手动拖入后 Zotero 客户端
+自己处理文件复制与同步（走 WebDAV），绕开 API 上传与坚果云限流。
+
+### 前置
+- `ZOTERO_API_KEY` 已设置（zshrc 或 export）
+- `ZOTERO_USER_ID`（默认 11261922）
+
+### Step 1 — 建/找父条目
+```
+# 查 DOI 是否已在库
+GET https://api.zotero.org/users/{userID}/items?q={doi}&qmode=everything
+# 无则建 journalArticle（元数据可来自 CrossRef: https://api.crossref.org/works/{doi}）
+POST /users/{userID}/items   [{itemType: journalArticle, title, creators, DOI, ...}]
+```
+collection key 解析：`GET /users/{userID}/collections` → 按 name 匹配 → 取 `key`，
+建条目时放 `collections: [key]`。
+
+### Step 2 — 建 attachment 子条目（关键坑）
+```json
+{
+  "itemType": "attachment",
+  "parentItem": "9BKZ3QUE",
+  "linkMode": "imported_file",
+  "title": "nsaf102-epmc.pdf",
+  "filename": "nsaf102_epmc.pdf",
+  "contentType": "application/pdf",
+  "collections": [],
+  "relations": {}
+}
+```
+> ⚠️ **不要带 md5 / mtime 字段**。带了会 412 `If-None-Match: * set but file exists`
+> （WebDAV 同步模式下 md5 被当作"文件已存在"）。文件信息在 Step 3 再传。
+> key 由服务器自动生成（8 位 `[2-9A-NP-Z]`），客户端创建时**禁止**手造 key。
+
+### Step 3 — 上传授权
+```
+POST /users/{userID}/items/{attachmentKey}/file
+Header: If-None-Match: *
+Content-Type: application/x-www-form-urlencoded   ← 不是 multipart！
+Body:   md5=<hex>&filename=<name>&filesize=<bytes>&mtime=<毫秒>&params=1
+```
+- `mtime` 必须**毫秒**（秒 × 1000）
+- `params=1` 让响应返回可直接 POST 的 S3 表单字段
+- 响应 200：`{url, params{...}, uploadKey}`；若 `{"exists":1}` 说明文件已存在，跳过上传
+
+### Step 4 — 上传到 S3
+```
+POST {url}   (multipart form)
+字段顺序：key 必须第一个，file 必须最后
+  key, acl, Content-MD5, success_action_status, policy,
+  x-amz-algorithm, x-amz-credential, x-amz-date, x-amz-signature, x-amz-security-token,
+  file=@/path/to.pdf
+期望 201 Created
+```
+
+### Step 5 — 注册
+```
+POST /users/{userID}/items/{attachmentKey}/file
+Header: If-None-Match: *
+Body:   upload=<uploadKey>
+期望 204 No Content；之后 GET item 可见 md5 已关联
+```
+
+### 错误速查
+| 状态 | 含义 | 处理 |
+|------|------|------|
+| 400 `POST data not provided` | Step3 用错了 Content-Type / multipart | 改 form-urlencoded |
+| 412 `If-None-Match: * set but file exists` | 附件创建时带了 md5 | 重建附件（不带 md5）|
+| 413 | 云配额满 | 清理附件或升级 |
+| 428 | 删除/更新缺版本头 | 加 `If-Unmodified-Since-Version: {version}` |
+
+### 清理误建附件
+```
+GET  /users/{userID}/items/{key}            → version
+DELETE /users/{userID}/items/{key}
+Header: If-Unmodified-Since-Version: {version}
+期望 204
+```

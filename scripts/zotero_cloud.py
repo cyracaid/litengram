@@ -1,5 +1,7 @@
 """Zotero Cloud PDF download fallback for LitEngram.
 Downloads missing PDFs from Zotero Web API when local copy is absent.
+
+PDF inbox: files land in LITENGRAM_PDF_INBOX if set, else ~/Zotero/pdf-inbox/.
 """
 
 import os, shutil, requests
@@ -8,22 +10,37 @@ from pathlib import Path
 USER_ID = int(os.environ.get("ZOTERO_USER_ID", "11261922"))
 API_KEY = os.environ.get("ZOTERO_API_KEY", "")
 
+# Download landing dir: user override wins, else default under Zotero data dir.
+PDF_INBOX = Path(os.environ.get("LITENGRAM_PDF_INBOX", "~/Zotero/pdf-inbox")).expanduser().resolve()
 
-def download_pdf(item_key, target_dir, filename=None):
+
+def _inbox_message(pdf_path):
+    """Human-readable next-step hints after a download."""
+    return (
+        f"PDF 已下载到:\n"
+        f"  {pdf_path}\n"
+        f"打开目录:  open {pdf_path.parent}\n"
+        f"手动挂载: 拖入 Zotero 对应条目，或 右键→添加附件→附加文件的副本"
+    )
+
+
+def download_pdf(item_key, target_dir=None, filename=None):
     """Download PDF attachment from Zotero cloud to local storage.
 
     Args:
         item_key: Zotero attachment item key (e.g., '5PUXID52')
-        target_dir: Directory to save the PDF (typically storage dir)
+        target_dir: Directory to save the PDF. Defaults to PDF_INBOX
+            (LITENGRAM_PDF_INBOX or ~/Zotero/pdf-inbox/).
         filename: Optional filename override
 
     Returns:
         Path to downloaded file, or None on failure.
     """
     if not API_KEY:
+        print("✗ 无法下载: ZOTERO_API_KEY 未设置")
         return None
 
-    target_dir = Path(target_dir).expanduser().resolve()
+    target_dir = Path(target_dir or PDF_INBOX).expanduser().resolve()
     target_dir.mkdir(parents=True, exist_ok=True)
 
     url = f"https://api.zotero.org/users/{USER_ID}/items/{item_key}/file"
@@ -46,10 +63,13 @@ def download_pdf(item_key, target_dir, filename=None):
             target_path = target_dir / (filename or f"{item_key}.pdf")
             with open(target_path, "wb") as f:
                 shutil.copyfileobj(resp.raw, f)
+            print(_inbox_message(target_path))
             return target_path
         elif resp.status_code == 404:
+            print(f"✗ 下载失败 404: 云端无此附件文件 (attachment {item_key})")
             return None
         else:
+            print(f"✗ 下载失败 {resp.status_code}: attachment {item_key}")
             return None
     except Exception:
         return None
