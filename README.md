@@ -4,7 +4,10 @@
 
 LitEngram 是一个面向科研工作者的 AI 驱动的文献精读框架。它将一篇论文从原始 PDF 转换为结构化的深度笔记，并同步到 **Zotero** 和 **Notion** 两个知识库。
 
-> 笔者是心理学研究者，框架偏向心理学文献（实验设计、EEG/fMRI 方法、临床样本等）。其他学科也完全可用，只是模板细节可能更贴近心理学惯例。
+> 笔者是心理学研究者，框架偏向心理学文献（实验设计、EEG/fMRI 方法、临床样本等）。
+> **v1.5 起支持 CS/NLP 双域**：通过 domain 判定自动分发分析模板与审稿清单，心理学路径保持原样、
+> NLP/ACL 路径走旁路（sidecar）。能力等价，两域互补（NLP 吃心理学的显著性/效应量纪律，
+> 心理学用 AI 工具的论文吃 NLP 的可复现性/数据污染检查）。
 
 ---
 
@@ -66,12 +69,29 @@ Zotero 自动使用本地的 `zotero.sqlite` 数据库，无需额外配置。
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
 | `NOTION_TOKEN` | — | Notion Integration Token（必填以启用 Notion 同步） |
-| `ZOTERO_API_KEY` | — | Zotero Web API Key（上传 PDF 附件 / 云端下载缺失 PDF 必需） |
+| `ZOTERO_API_KEY` | — | Zotero Web API Key（上传 PDF 附件 / 云端下载缺失 PDF / 批量导入 必需） |
 | `ZOTERO_USER_ID` | `11261922` | Zotero 用户 ID（配合 API Key 使用） |
-| `LITENGRAM_CONFIG_PATH` | `~/Documents/CAD/.litengram_config.json` | Notion 页面 ID 缓存路径 |
+| `LITENGRAM_CONFIG_PATH` | `~/Documents/CAD/.litengram_config.json` | Notion 页面 ID 缓存 + project_dirs 映射路径 |
 | `ZOTERO_DB_PATH` | `~/Zotero/zotero.sqlite` | Zotero SQLite 数据库路径 |
 | `LITENGRAM_PDF_INBOX` | `~/Zotero/pdf-inbox/` | PDF 下载落点（云端下载/手动模式） |
 | `LITENGRAM_LIBRARY_ID` | `1` | Zotero 库 ID（通常为 1） |
+
+### 论文落点（project_dirs 映射）
+
+笔记本地 `.md` 的写入目录由「论文所属 Zotero collection 名 → 磁盘目录」映射决定，
+在 `.litengram_config.json` 的 `project_dirs` 里配置：
+
+```json
+{
+  "project_dirs": {
+    "CAD": "~/Documents/CAD"
+  }
+}
+```
+
+- Zotero collection 名命中 `project_dirs` 键 → 该 collection 的论文笔记写入 `{dir}/litreview/`
+- collection 无匹配 → 默认 `~/Documents/CAD/litreview/`
+- 不同研究各自注册独立的 collection → 目录映射，笔记按项目归置（如 `2608NLP` → `~/Documents/CAD/2608NLP/litreview/`），多个项目互不混入默认目录
 
 ---
 
@@ -255,6 +275,47 @@ references/zotero_workflow.md, README.md
 
 修改文件: scripts/zotero_cloud.py, scripts/zotero_upload.py,
 references/zotero_workflow.md, README.md
+
+---
+
+## v1.5 修复记录
+
+### v1.5 — NLP/ACL 双域支持（sidecar，psych 零破坏）
+
+新增 CS/NLP 一侧的并行分析路径，共用核心分析引擎（三遍读法 / 5 维度 / 9 层深挖 / 结构门禁 / 输出兼容层）。
+
+- **domain 判定**：Stage 3 维度 2 按三个信号（术语 / venue / 内容）判定 `psych / nlp / hybrid / review-theory`，下游 Stage 5/6 按它选清单与模板
+- **NLP 评测公平性 checklist**：基线同预算调参、显著性检验、指标 cherry-pick、多次 seed 方差、消融完整、数据污染/预训练泄漏、人类评估一致性、代码公开 —— 与 psych 统计完整性 checklist 并行，互不覆盖
+- **方法节 domain 分发**：psych 版（被试/设计/流程/分析）保留原样；nlp 版新增（任务/数据/架构/训练/评测 + AI 实验设计检查点）；hybrid 双版全量
+- **📏 复现性节**（全类型必填）：代码状态 / 数据 license / 算力门槛 / 复现数字核对
+- **核心发现**：nlp/hybrid 加 SOTA vs 本文 vs 强基线 对比表
+- **📎 关键引用**：新增 🧰 实现来源 角色符号；arXiv 论文引用格式
+- **论文类型** 七分类 → 九分类：+🗂️ Dataset/Resource、🖥️ System
+- **审稿人自审**：维度 4 按 domain 分发；新增 NLP 域攻击点（评测不公 / 指标挑软 / 污染泄漏 / human-eval 缺一致性）
+- **arXiv 直抓分支**：无 Zotero / 输入 arXiv ID 时，从 `export.arxiv.org` 拿元数据 + 下 PDF 到 pdf-inbox，`pdf_status=not_imported` 时 Stage 7b 跳过 Zotero 写入
+
+> psych 路径零改动：统计完整性 checklist、psych 方法四子节、七类型（现九类）均保留。
+> 唯一全类型新增是 📏 复现性节（psych 也对应对应 open data 项）。
+
+修改文件: references/literature_analysis_framework.md, literature_note_template.md,
+paper_priority.md, reviewer_protocol.md, stage_1-2_intake.md, stage_6_note.md
+
+---
+
+### 批量导入候选清单（收件，非精读）
+
+文献扫描产出的候选 arXiv 清单可用 `zotero_add_batch_2608NLP.py`（在项目 `literature/` 目录）
+一键导入 Zotero 指定 collection：
+
+```bash
+python3 zotero_add_batch_2608NLP.py --collection 2608NLP --dry-run   # 预览
+python3 zotero_add_batch_2608NLP.py --collection 2608NLP             # 真实导入
+```
+
+- 元数据抓取走 `export.arxiv.org`，**必须在你本机（能连外网）终端跑**；云端沙箱 egress 挡该 host
+- 导入的是**收件箱**（inbox），全部条目 `❓未核实` —— 不等同于精读笔记
+- 精读仍是 LitEngram 逐篇管线：从 collection 取一篇 → Stage 0-7 → 单独成笔记
+- README 顶部"一次只读一篇"不变：批量导入只是把候选归拢进 Zotero，Depth 精读依旧逐篇
 
 ---
 
