@@ -1,0 +1,960 @@
+===== PAGE 1 =====
+Записки научных
+семинаров ПОМИ
+Том 529, 2026 г.
+Andrey Goncharov , Nikolai Kondusov, Alexey Zaytsev
+LANGUAGE STEERING IN LATENT SPACE TO MITIGATE
+UNINTENDED CODE-SWITCHING
+Abstract. Multilingual Large Language Models (LLMs) often ex-
+hibit hallucinations such as unintended code-switching, reducing re-
+liability in downstream tasks. We propose latent-space language
+steering, a lightweight inference-time method that identifies lan-
+guage directions via Principal Component Analysis (PCA) on paral-
+lel translations and steers token embeddings along these axes to con-
+trol language identity. Our approach mitigates code-switching while
+preserving semantics with negligible computational overhead and
+requires only minimal parallel data for calibration. Empirically, we
+achieve 95-99% language classification accuracy using a single prin-
+cipal component and reduce next-token distributional divergence by
+up to 55% across multiple language pairs on Qwen2.5 and Llama-3.2
+models. Generation-based evaluation on Llama-3.2 further demon-
+strates 63–99% reduction in Code-Switching Index across four lan-
+guage pairs (p < 0.001). We further analyze the layer-wise evolution
+of language representations, revealing that language identity con-
+centrates in final layers with near-perfect linear separability.
+§1. Introduction
+Multilingual large language models (LLMs) frequently exhibit unin-
+tended code-switching - generating tokens in languages other than the
+target despite explicit monolingual instructions. Ryan et al. [13] document
+how LLM alignment procedures can cause models to default to English
+even when prompted in other languages, while Yoo et al. [17] demonstrate
+that code-switching serves as an effective red-teaming vector, bypassing
+safety filters. In deployed systems, such behavior degrades user trust. For
+instance, a customer-service chatbot prompted in Spanish may switch to
+English mid-response, confusing users. Existing solutions require costly
+fine-tuning or introduce latency via decoding-time interventions.
+We propose latent space language steering, a cheap inference-time method
+that exploits low-dimensional language directions in hidden representa-
+tions. By applying PCA to parallel translations, we identify linear sub-
+spaces separating languages while preserving semantics. Steering via simple
+1
+arXiv:2510.13849v3  [cs.CL]  15 Apr 2026
+
+===== PAGE 2 =====
+2
+A. GONCHAROV, N. KONDUSOV, A. ZAYTSEV
+projection (one dot product and vector subtraction per token) mitigates
+code-switching with negligible overhead.
+Figure 1. Language steering in hidden space: 1. Collect
+parallel translations of the same concepts; 2. LLM forward
+pass to get embeddings by layer; 3. Perform PCA by layer
+on the merged embeddings.
+Our analysis shows language identity concentrates in final layers, with
+the first principal component (PC1) capturing most of the variance and
+enabling near-perfect language classification. We validate across Qwen2.5
+and Llama-3.2 models on multiple language pairs (English, Spanish, Rus-
+sian, Chinese, and Hindi), demonstrating reduced distributional divergence
+and substantially lower code-switching rates in generated text.
+Contributions.
+• We introduce a cheap steering method with negligible overhead
+requiring only parallel translations for calibration.
+• Empirically validate across models and language pairs, showing
+reduced code-switching across both distributional and generation-
+based evaluations.
+• Introduce a nearly perfect language classifier based on PCA pro-
+jections.
+• Demonstrate language clustering in multilingual LLMs.
+• Code and data are released to facilitate further research 1.
+§2. Related works
+Code-switching and multilingual control. While code-switching has been
+studied for mixed-language inputs in speech and NER [1, 2], recent work
+1https://github.com/fxlrnrpt/language-steering-in-latent-space
+
+===== PAGE 3 =====
+LANGUAGE STEERING IN LATENT SPACE
+3
+identifies unintended code-switching in multilingual LLM outputs [13,17],
+degrading user experience and evaluation. Standard mitigations require
+costly fine-tuning on monolingual data, reinforcement learning with language-
+specific rewards, or brittle prompt engineering.
+Language structure in representations. Work on mBERT and XLM-R showed
+language identity concentrates in few principal components, separable from
+semantics in parallel texts [4, 5]. Yang et al. [16] removed these compo-
+nents for language-agnostic embeddings. Wendler et al. [15] extended this
+to decoder-only LLMs, revealing latent language preferences. We exploit
+this structure for active generation control.
+Representation steering and concept erasure. Recent work has shown that
+high-level concepts can be located and manipulated in model representa-
+tions via linear methods. Zou et al. [18] introduced representation engineer-
+ing, using PCA on contrastive prompt pairs to identify concept directions
+(e.g., honesty, harmlessness) and steering activations along them. Turner et
+al. [14] proposed activation addition, adding steering vectors to the residual
+stream at inference time. In parallel, concept erasure methods like Ravfogel
+et al. [12] (iterative null-space projection) and Belrose et al. [3] (closed-form
+linear erasure) remove specific attributes from representations by project-
+ing onto their null space. Li et al. [9] applied probing-guided inference-time
+intervention on attention heads to elicit truthful outputs. These methods
+have primarily targeted sentiment, truthfulness, and toxicity. We apply the
+same conceptual framework to language identity.
+§3. Methods
+Our approach operates in the latent space of pre-trained multilingual
+LLMs without fine-tuning. We identify language-specific directions via
+PCA on parallel translations, then steer representations along these di-
+rections to control code-switching.
+3.1. Language Direction Identification. Given a parallel corpus D = {(si, ki)}N
+i=1
+where si represents semantically equivalent content in language k ∈K, we
+extract hidden states h(ℓ)
+i
+∈Rd from each layer ℓof the LLM. Specifically,
+we use the hidden state at the last token position of each sentence. For
+each layer, we pool hidden states across all languages and apply PCA to
+the centered embeddings H(ℓ) = {h(ℓ)
+i }N
+i=1. The first principal component
+
+===== PAGE 4 =====
+4
+A. GONCHAROV, N. KONDUSOV, A. ZAYTSEV
+v(ℓ) captures the language direction:
+v(ℓ) = arg max
+∥v∥=1
+N
+X
+i=1
+
+v⊤(h(ℓ)
+i
+−¯h(ℓ))
+2
+(1)
+When semantic content is constant across languages, language identity be-
+comes the dominant variance source, making v(ℓ) an interpretable language
+axis.
+3.2. Latent-Space Language Steering. Empirical analysis (Section 4) shows
+language variance concentrates in final layers. We apply steering only to
+layers ℓ≥ℓcrit: for Qwen2.5-1.5B (28 layers), we steer layers 27-28; for
+Llama-3.2-1B (16 layers), we steer layers 15-16. For each token’s hidden
+state h(ℓ)
+t
+during generation, we modify the language component:
+˜h(ℓ)
+t
+= h(ℓ)
+t
+−s
+
+h(ℓ)
+t
+· v(ℓ)
+v(ℓ)
+(2)
+where s ∈R controls intervention strength, selected via grid search to
+optimize either distributional similarity (KL divergence) or generation-
+based code-switching metrics (Section 4.4). When s = 1, this is an exact
+orthogonal projection that removes the language component. Values 0 <
+s < 1 partially attenuate it, while |s| > 1 goes beyond projection removal,
+actively pushing representations away from the source language direction.
+In practice, optimal coefficients have |s| > 1 (see Table 7), indicating
+that mere removal is insufficient and active counter-steering is needed to
+overcome the language bias in code-switched input.
+3.3. Language Prediction. To validate our approach, we train a logistic
+regression classifier on final-layer projections zi = h(L)
+i
+· v(L):
+P(k | z) =
+exp(wkz + bk)
+P
+k′∈K exp(wk′z + bk′)
+(3)
+This one-dimensional classifier predicts language identity with high accu-
+racy, demonstrating the interpretability of discovered directions.
+§4. Results
+We validate our approach on Qwen2.5-1.5B [11] and Llama-3.2-1B [7]
+open models across multiple language pairs, demonstrating both the exis-
+tence of interpretable language directions and their effectiveness for code-
+switching control.
+
+===== PAGE 5 =====
+LANGUAGE STEERING IN LATENT SPACE
+5
+100
+50
+0
+50
+100
+150
+200
+PCA Component 1
+150
+100
+50
+0
+50
+100
+PCA Component 2
+English
+Spanish
+Mandarin
+Russian
+Hindi
+(a) Qwen
+60
+40
+20
+0
+20
+40
+60
+PCA Component 1
+60
+40
+20
+0
+20
+40
+PCA Component 2
+English
+Spanish
+Mandarin
+Russian
+Hindi
+(b) Llama
+Figure 2. Final layer language map
+0.4
+0.2
+0.0
+0.2
+0.4
+0.6
+0.8
+PCA Component 1
+0.6
+0.5
+0.4
+0.3
+0.2
+0.1
+0.0
+0.1
+PCA Component 2
+English
+Spanish
+Mandarin
+Russian
+Hindi
+(a) First layer
+2
+1
+0
+1
+2
+PCA Component 1
+2.5
+2.0
+1.5
+1.0
+0.5
+0.0
+0.5
+1.0
+1.5
+PCA Component 2
+English
+Spanish
+Mandarin
+Russian
+Hindi
+(b) Mid layer
+0
+2
+4
+6
+8
+10
+12
+14
+16
+Layer
+0.04
+0.06
+0.08
+0.10
+Explained Variance Ratio
+Explained variance for 1st PCA component
+(c) Explained variance
+Figure 3. Llama layer-wise language maps and explained
+variance
+4.1. Language direction identification.
+Experimental setup. We use Flores Plus [10] dataset with 50 parallel sam-
+ples (English, Spanish, Russian, Chinese, Hindi) for PCA fitting and 100
+for validation.
+Language maps reveal emergent clustering. Figure 2a and 2b show final-
+layer embeddings projected onto the first two PCs. Consistent with prior
+findings [5, 15], models organize identical content into tight, language-
+specific clusters with clear boundaries. Languages within the Indo-European
+family (Spanish, Russian) cluster closer than typologically distant pairs
+
+===== PAGE 6 =====
+6
+A. GONCHAROV, N. KONDUSOV, A. ZAYTSEV
+60
+40
+20
+0
+20
+40
+60
+PCA Component 1
+40
+20
+0
+20
+40
+60
+PCA Component 2
+en
+cn
+(a) English - Chi-
+nese
+40
+20
+0
+20
+40
+PCA Component 1
+40
+20
+0
+20
+40
+PCA Component 2
+en
+es
+(b) English - Span-
+ish
+40
+20
+0
+20
+40
+60
+PCA Component 1
+40
+20
+0
+20
+40
+PCA Component 2
+en
+ru
+(c) English - Rus-
+sian
+60
+40
+20
+0
+20
+40
+60
+PCA Component 1
+40
+20
+0
+20
+40
+60
+PCA Component 2
+en
+hin
+(d) English - Hindi
+Figure 4. Llama final layer language maps for each lan-
+guage pair
+(English–Chinese), suggesting PC1 captures coarse language distinction
+while PC2 encodes finer linguistic properties.
+Figures
+3a
+3b show layer-wise evolution: clusters emerge loosely in
+early layers and sharpen dramatically in final layers. Figure 3c reveals
+late-stage specialization for language identity. Pairwise maps (Figures 4a,
+4b, 4c, 4d) confirm clean linear separability for all tested pairs.
+4.2. Language prediction.
+Experimental setup. We use Flores Plus [10] dataset with 50 parallel sam-
+ples (English, Spanish, Russian, Chinese, Hindi) for PCA and logistic re-
+gression fitting and 100 for validation.
+Classifier shows nearly perfect performance. Table 1 demonstrates that a
+simple logistic regression classifier trained only on the first principal com-
+ponent achieves near-perfect accuracy (0.96-1.00) across all language pairs
+and both models. This validates that language identity information is lin-
+early accessible in the final layer representations, supporting our hypoth-
+esis that models maintain explicit language directions in their activation
+space. We observe decreased performance for the English-Spanish pair in
+both models, attributable to these languages being more closely related to
+each other.
+4.3. Language steering.
+Experimental setup. We fit the steering module on Flores Plus with 200
+parallel samples and test on 2,467 TED Talks samples with artificial code-
+switching. Each sample is truncated to 20 words, split at the midpoint,
+and the second half is translated to the target language using Gemini 2.5
+
+===== PAGE 7 =====
+LANGUAGE STEERING IN LATENT SPACE
+7
+Language pair
+Qwen
+Llama
+English - Chinese
+0.98
+0.98
+English - Spanish
+0.96
+0.96
+English - Russian
+0.99
+0.99
+English - Hindi
+0.98
+1.00
+Table 1. Last layer language classifier accuracy
+Flash via the OpenRouter API, producing texts that begin in English and
+switch mid-sentence. We note that this artificial code-switching created by
+translating the second half of each sentence may not capture the full com-
+plexity of naturally occurring code-switching. We use this controlled setup
+to isolate the effect of steering but acknowledge the need for evaluation on
+naturally occurring code-switched text in future work. Success is measured
+by comparing the next-token prediction distribution of the steered model
+against the English baseline using four complementary metrics: KL di-
+vergence KL(PEN∥Psteered), Jensen-Shannon divergence, cosine similarity,
+and top-50 token overlap. Lower divergence and higher similarity/overlap
+indicate better mitigation.
+To find the best steering strength coefficient we conduct a grid search
+with the best values listed in Table 7 for each language pair.
+Results. Table 2 demonstrates that steering shifts predictions from Span-
+ish tokens (muy, bastante, tan) to their English equivalents (very, quite,
+so) while preserving semantic coherence. For well-calibrated coefficients,
+steering changes how the model speaks rather than what it says, though
+aggressive coefficients can disrupt semantic content (see Limitations).
+Table 3 shows steering reduces KL divergence by 25-55% across lan-
+guage pairs and models (38% average for Qwen, 43% for Llama). While
+the method substantially mitigates code-switching, the remaining gap in-
+dicates that the complex structure of the manifold does not allow full
+reconstruction of the original concept with a simple linear transforma-
+tion. The method shows strongest performance for typologically distant
+pairs: English-Chinese achieves 55% KL reduction on Qwen, while English-
+Russian achieves 55% on Llama. We hypothesize that model-specific to-
+kenization and training data balance play a key role: the Qwen model
+processed much more English and Chinese data, leading to more granular
+tokenization and better internal generalization for that pair. English-Hindi
+remains the weakest pair for both models (24-27% reduction).
+
+===== PAGE 8 =====
+8
+A. GONCHAROV, N. KONDUSOV, A. ZAYTSEV
+Original
+Unsteered
+Steered
+still
+muy
+very
+going
+un
+surprised
+not
+bastante
+pretty
+so
+tan
+starting
+a
+sor
+working
+just
+mГЎs
+content
+really
+a
+rather
+in
+empez
+impressed
+very
+de
+quite
+sitting
+content
+–
+quite
+en
+great
+pretty
+enc
+beginning
+here
+aquГ
+answering
+thinking
+pens
+almost
+looking
+realmente
+fully
+kind
+dese
+____
+getting
+completamente
+__
+having
+feliz
+even
+actually
+org
+heart
+surprised
+seguro
+trying
+Table 2. Top 20 token sample (Qwen, English-Spanish)
+These findings are supported by supplementary metrics. JS divergence
+(Table 4) shows consistent improvement across all pairs. Cosine similarity
+between steered and English baseline distributions increases substantially
+(Table 5), e.g., from 0.02 to 0.22 for Qwen English-Chinese. Top-50 token
+overlap (Table 6) reveals that steering dramatically increases the number
+of shared high-probability tokens with the English baseline - from under
+8% to over 25% for most pairs. English-Hindi on Qwen again shows min-
+imal improvement across all supplementary metrics (cosine: 0.04 →0.07,
+overlap: 11.23% →11.68%), reinforcing that this is the most challenging
+pair.
+Notably, the optimal steering coefficient for Qwen English-Hindi is pos-
+itive (+5.0), indicating a reversed PCA direction for this pair relative to
+all others. This may reflect tokenization asymmetries in the Qwen model’s
+treatment of Devanagari script. In contrast, Llama uses a consistent neg-
+ative direction across all language pairs (Table 7).
+
+===== PAGE 9 =====
+LANGUAGE STEERING IN LATENT SPACE
+9
+Language pair
+Qwen
+Llama
+English - Chinese
+10.15 →4.52
+9.05 →4.77
+English - Spanish
+7.25 →4.90
+6.52 →3.48
+English - Russian
+8.70 →5.40
+7.77 →3.49
+English - Hindi
+9.60 →7.02
+8.06 →6.13
+Table 3. KL divergence (no steering →steering)
+Language pair
+Qwen
+Llama
+English - Chinese
+0.67 →0.49
+0.65 →0.51
+English - Spanish
+0.59 →0.52
+0.58 →0.44
+English - Russian
+0.62 →0.50
+0.62 →0.43
+English - Hindi
+0.64 →0.60
+0.63 →0.54
+Table 4. JS divergence (no steering →steering)
+Language pair
+Qwen
+Llama
+English - Chinese
+0.02 →0.22
+0.05 →0.21
+English - Spanish
+0.12 →0.18
+0.12 →0.29
+English - Russian
+0.09 →0.23
+0.10 →0.31
+English - Hindi
+0.04 →0.07
+0.06 →0.16
+Table 5. Cosine similarity (no steering →steering, higher
+= better)
+Language pair
+Qwen
+Llama
+English - Chinese
+3.69% →26.46%
+4.47% →24.31%
+English - Spanish
+11.41% →20.23%
+11.45% →30.74%
+English - Russian
+7.41% →25.45%
+7.49% →31.96%
+English - Hindi
+11.23% →11.68%
+6.54% →25.88%
+Table 6. Top-50 token overlap (no steering →steering,
+higher = better)
+4.4. Generation-based evaluation. To complement the distributional anal-
+ysis above, we evaluate steering on actual text generation using Llama-3.2-
+1B. For each of 500 TED Talks samples per language pair, we generate 100-
+token continuations in three conditions: (A) English-only input without
+
+===== PAGE 10 =====
+10
+A. GONCHAROV, N. KONDUSOV, A. ZAYTSEV
+Language pair
+Qwen
+Llama
+English - Chinese
+−3.2
+−5.0
+English - Spanish
+−2.8
+−3.7
+English - Russian
+−2.2
+−3.5
+English - Hindi
++5.0
+−3.6
+Table 7. Best steering strength coefficient (KL-optimized)
+steering, (B) code-switched input without steering, and (C) code-switched
+input with steering. We measure code-switching in the generated output
+using standard metrics [6,8]: Code-Switching Index (CSI), the fraction of
+tokens not in the target language (lower = better); M-Index, a multilin-
+gual diversity measure (0 = monolingual, 1 = maximally mixed); I-Index,
+the ratio of language switch points to token boundaries; and Target Lan-
+guage Consistency (TLC = 1−CSI, higher = better). Token-level language
+identification uses a FastText classifier with a sliding window of 5 tokens.
+Steering coefficients. We evaluate two sets of steering coefficients (Table 8).
+The KL-optimized set uses the coefficients from the distributional grid
+search (Table 7). The CSI-optimized set is obtained by a separate grid
+search that directly minimizes CSI on a 10-sample calibration subset. CSI-
+optimized coefficients tend toward higher magnitudes, which improves lan-
+guage control but increases degeneration risk (see Limitations).
+Language pair
+KL-opt.
+CSI-opt.
+English - Chinese
+−5.0
+−5.0
+English - Spanish
+−3.7
+−5.0
+English - Russian
+−3.5
+−4.0
+English - Hindi
+−3.6
+−5.0
+Table 8. Llama-3.2-1B steering coefficients: KL-optimized
+(from distributional analysis) vs. CSI-optimized (from
+generation grid search).
+Results. Table 9 shows that steering substantially reduces code-switching
+in generated text. With KL-optimized coefficients, CSI drops by 63–95%
+
+===== PAGE 11 =====
+LANGUAGE STEERING IN LATENT SPACE
+11
+across language pairs, demonstrating that distributional optimization trans-
+fers well to generation. CSI-optimization yields further gains for English-
+Spanish (0.23 →0.11) and English-Hindi (0.04 →0.01), but at the cost of
+higher-magnitude coefficients that increase degeneration risk.
+KL-optimized
+CSI-optimized
+Language pair
+CSI (↓)
+TLC (↑)
+CSI (↓)
+TLC (↑)
+Unsteered (code-switched input, no steering):
+English - Chinese
+0.64 / 0.36
+—
+English - Spanish
+0.62 / 0.38
+—
+English - Russian
+0.59 / 0.41
+—
+English - Hindi
+0.81 / 0.19
+—
+Steered:
+English - Chinese
+0.03
+0.97
+0.03
+0.97
+English - Spanish
+0.23
+0.77
+0.11
+0.89
+English - Russian
+0.02
+0.98
+0.01
+0.99
+English - Hindi
+0.04
+0.96
+0.01
+0.99
+Table
+9. Generation-based
+code-switching
+metrics
+(Llama-3.2-1B,
+n
+=
+500).
+English-only
+baseline:
+CSI
+=
+0.02.
+All
+steered
+vs.
+unsteered
+differences
+significant at p < 0.001 (Wilcoxon signed-rank test).
+Notably, steering coefficients are highly fragile: small changes in mag-
+nitude can shift the model from fluent code-switched output to degener-
+ate repetition. The CSI-optimized coefficients cluster near the maximum
+tested value (−5.0), suggesting that direct optimization of generation met-
+rics pushes toward an aggressive regime where language control and fluency
+trade off sharply.
+Qualitative analysis. Table 10 shows representative examples. Steering suc-
+cessfully redirects generation from the foreign language to English, but
+aggressive coefficients can produce repetitive output patterns, indicating a
+trade-off between language control and generation fluency that we discuss
+further in Limitations.
+§5. Conclusion
+We introduced latent-space language steering, a lightweight inference-
+time method that mitigates unintended code-switching in multilingual
+LLMs without fine-tuning. By extracting language directions via PCA on
+
+===== PAGE 12 =====
+12
+A. GONCHAROV, N. KONDUSOV, A. ZAYTSEV
+en-es: “...I took on the task to ense˜nar desarrollo global...”
+Unsteered
+de que un grupo de estudiantes suecos, que hab´ian sido enviados
+a la Universidad de Harvard, me escribieron para pedir ayuda...
+Steered
+de that I had the opportunity to work with the first two editions
+of the course and I was very inspired by it...
+en-ru: “...About 10 years ago, I took on the task to [Russian text]...”
+Degenerate
+steered
+first year of the first year of the first year of the first year of the
+first year...
+Table 10. Generated continuations (Llama-3.2-1B, KL-
+optimized). Top: steering successfully redirects Spanish
+to coherent English. Bottom: steering eliminates Russian
+but produces degenerate repetition.
+parallel translations, our approach enables precise control over language
+identity with negligible overhead - one dot product and vector subtraction
+per token.
+Our empirical analysis across Qwen2.5 and Llama-3.2 models reveals
+that language identity concentrates in final layers with near-perfect lin-
+ear separability. This geometric structure enables both accurate language
+classification (95-99% accuracy) and effective steering that reduces dis-
+tributional divergence by up to 55% and achieves 63–99% Code-Switching
+Index reduction in generated text. The layer-wise evolution shows language
+identity crystallizes in final layers while early layers focus on semantics,
+suggesting these occupy largely orthogonal subspaces.
+While distributional divergence is reduced by 40% on average and gener-
+ated text shows near-complete language conversion (TLC > 0.77 across all
+pairs), steering coefficients are highly fragile - aggressive values eliminate
+code-switching but can produce degenerate repetition, revealing a sharp
+trade-off between language control and generation fluency. Our approach
+demonstrates that interpretable control mechanisms can be extracted from
+learned representations, offering a promising direction toward lightweight
+alternatives to fine-tuning for multilingual language control, though ad-
+dressing the fluency–control trade-off and coefficient sensitivity remains
+important future work. Natural extensions include multilingual steering
+
+===== PAGE 13 =====
+LANGUAGE STEERING IN LATENT SPACE
+13
+(controlling language choice among three or more languages simultane-
+ously) and bidirectional steering (e.g., steering from English toward Span-
+ish), both of which the geometric structure of the multilingual PCA maps
+suggests should be feasible.
+Limitations
+• Model scale and diversity. Experiments limited to small models
+(1-1.5B parameters) and two architectures (Qwen2.5, Llama-3.2).
+Larger models and diverse architectures remain unexplored.
+• Incomplete reconstruction. While the method achieves up to 55%
+KL divergence reduction, the remaining gap indicates linear pro-
+jections cannot fully reconstruct monolingual distributions, sug-
+gesting non-linear language-semantic interactions at the manifold
+level.
+• Dataset coverage. Evaluation relies on Flores Plus and TED Talks
+(formal text). Conversational data, technical domains, and natu-
+rally occurring code-switching patterns are not tested. Our artifi-
+cial code-switching setup produces mid-sentence switches at fixed
+positions, which may not reflect the morphosyntactic boundaries
+where natural code-switching typically occurs. Evaluation on nat-
+uralistic code-switching corpora such as the LinCE benchmark [1]
+is an important direction for future work.
+• Language typology. Limited to Indo-European and Chinese lan-
+guages. Low-resource languages, right-to-left scripts, and typolog-
+ically distant languages (agglutinative, tonal) unexplored. Hindi
+showed the weakest improvement across both models, with KL
+reduction (24-27%) but minimal gains in other distributional sim-
+ilarity metrics, suggesting tokenization or data balance issues.
+• Layer-wise steering. Steering applied only to final layers based
+on empirical observation. Systematic exploration of multi-layer or
+adaptive steering strategies not conducted.
+• Evaluation metrics. While we supplement distributional metrics
+(KL, JS divergence) with generation-based code-switching metrics
+(CSI, M-Index, I-Index), we do not evaluate semantic preserva-
+tion or downstream task performance. Human evaluation of output
+quality remains needed.
+
+===== PAGE 14 =====
+14
+A. GONCHAROV, N. KONDUSOV, A. ZAYTSEV
+• Fluency–control trade-off and coefficient fragility. Generation-based
+evaluation reveals that aggressive steering coefficients, while effec-
+tive at eliminating code-switching (CSI < 0.01 for English-Russian
+and English-Hindi), can produce repetitive or degenerate output
+patterns. Steering coefficients are highly fragile. Small changes in
+magnitude shift behavior from fluent code-switched text to degen-
+erate repetition. The CSI-optimized coefficients cluster near the
+maximum tested values (−5.0), suggesting that direct optimization
+of generation metrics pushes toward an aggressive regime. Com-
+bining steering with constrained decoding or adaptive coefficient
+scheduling could mitigate this issue.
+• Steering calibration. Optimal coefficients require manual grid search
+per language pair and depend on the optimization target (dis-
+tributional vs. generation-based). Principled or adaptive selection
+methods not developed.
+• Efficiency benchmarking. No rigorous latency profiling across hard-
+ware configurations or batch sizes to validate overhead claims for
+production deployment.
+• Bilingual, English-only steering. Our evaluation steers exclusively
+toward English in bilingual settings. Multilingual steering (con-
+trolling language choice among three or more languages simulta-
+neously) and bidirectional steering (e.g., steering from English to-
+ward Spanish) are natural extensions that we leave to future work.
+The multilingual PCA maps (Figures 2a, 2b) suggest the geometric
+structure supports such extensions, as multiple language clusters
+are simultaneously separable.
+Acknowledgements
+The research was supported by the Russian Science Foundation grant
+No. 25-11-00355, https://rscf.ru/project/25-11-00355/.
+References
+1. Gustavo Aguilar, Sudipta Kar, and Thamar Solorio, Lince: A centralized benchmark
+for linguistic code-switching evaluation, Proceedings of the Twelfth Language Re-
+sources and Evaluation Conference (Marseille, France) (Nicoletta Calzolari, Fr´ed´eric
+B´echet, Philippe Blache, Khalid Choukri, Christopher Cieri, Thierry Declerck, Sara
+Goggi, Hitoshi Isahara, Bente Maegaard, Joseph Mariani, H´el`ene Mazo, Asunci´on
+Moreno, Jan Odijk, and Stelios Piperidis, eds.), European Language Resources As-
+sociation, May 2020, pp. 1803–1813.
+
+===== PAGE 15 =====
+LANGUAGE STEERING IN LATENT SPACE
+15
+2. Kalika Bali, Jatin Sharma, Monojit Choudhury, and Yogarshi Vyas, “i am borrowing
+ya mixing ?” an analysis of English-Hindi code mixing in Facebook, Proceedings
+of the First Workshop on Computational Approaches to Code Switching (Doha,
+Qatar) (Mona Diab, Julia Hirschberg, Pascale Fung, and Thamar Solorio, eds.),
+Association for Computational Linguistics, October 2014, pp. 116–126.
+3. Nora Belrose, David Schneider-Joseph, Shauli Ravfogel, Ryan Cotterell, Edward
+Raff, and Stella Biderman, LEACE: Perfect linear concept erasure in closed form,
+Advances in Neural Information Processing Systems, vol. 36, 2023.
+4. Ethan A. Chi, John Hewitt, and Christopher D. Manning, Finding universal gram-
+matical relations in multilingual BERT, Proceedings of the 58th Annual Meeting
+of the Association for Computational Linguistics (Online) (Dan Jurafsky, Joyce
+Chai, Natalie Schluter, and Joel Tetreault, eds.), Association for Computational
+Linguistics, July 2020, pp. 5564–5577.
+5. Alexis Conneau, Shijie Wu, Haoran Li, Luke Zettlemoyer, and Veselin Stoyanov,
+Emerging cross-lingual structure in pretrained language models, Proceedings of the
+58th Annual Meeting of the Association for Computational Linguistics (Online)
+(Dan Jurafsky, Joyce Chai, Natalie Schluter, and Joel Tetreault, eds.), Association
+for Computational Linguistics, July 2020, pp. 6022–6034.
+6. Bj¨orn Gamb¨ack and Amitava Das, Comparing the level of code-switching in corpora,
+Proceedings of the Tenth International Conference on Language Resources and
+Evaluation (LREC’16) (Portoroˇz, Slovenia) (Nicoletta Calzolari, Khalid Choukri,
+Thierry Declerck, Sara Goggi, Marko Grobelnik, Bente Maegaard, Joseph Mariani,
+Helene Mazo, Asuncion Moreno, Jan Odijk, and Stelios Piperidis, eds.), European
+Language Resources Association (ELRA), May 2016, pp. 1850–1855.
+7. Aaron Grattafiori, Abhimanyu Dubey, Abhinav Jauhri, Abhinav Pandey, Abhishek
+Kadian, Ahmad Al-Dahle, et al., The llama 3 herd of models, 2024.
+8. Gualberto GuzmГЎn, Joseph Ricard, Jacqueline Serigos, Barbara E. Bullock, and
+Almeida Jacqueline Toribio, Metrics for Modeling Code-Switching Across Corpora,
+Interspeech 2017, 2017, pp. 67–71.
+9. Kenneth Li, Oam Patel, Fernanda Vi´egas, Hanspeter Pfister, and Martin Watten-
+berg, Inference-time intervention: Eliciting truthful answers from a language model,
+Advances in Neural Information Processing Systems, vol. 36, 2024.
+10. NLLB Team, Marta R. Costa-juss`a, James Cross, Onur ¸Celebi, Maha Elbayad, Ken-
+neth Heafield, et al., Scaling neural machine translation to 200 languages, Nature
+630 (2024), no. 8018, 841–846.
+11. Qwen, :, An Yang, Baosong Yang, Beichen Zhang, Binyuan Hui, et al., Qwen2.5
+technical report, 2025.
+12. Shauli Ravfogel, Yanai Elazar, Hila Gonen, Michael Twiton, and Yoav Goldberg,
+Null it out: Guarding protected attributes by iterative nullspace projection, Pro-
+ceedings of the 58th Annual Meeting of the Association for Computational Linguis-
+tics (Online) (Dan Jurafsky, Joyce Chai, Natalie Schluter, and Joel Tetreault, eds.),
+Association for Computational Linguistics, July 2020, pp. 7237–7256.
+13. Michael J. Ryan, William Held, and Diyi Yang, Unintended impacts of LLM align-
+ment on global representation, Proceedings of the 62nd Annual Meeting of the As-
+sociation for Computational Linguistics (Volume 1: Long Papers) (Bangkok, Thai-
+land), Association for Computational Linguistics, August 2024, pp. 16121–16140.
+
+===== PAGE 16 =====
+16
+A. GONCHAROV, N. KONDUSOV, A. ZAYTSEV
+14. Alexander Matt Turner, Lisa Thiergart, Gavin Leech, David Udell, Juan J. Vazquez,
+Ulisse Mini, and Monte MacDiarmid, Steering language models with activation
+engineering, 2024.
+15. Chris Wendler, Veniamin Veselovsky, Giovanni Monea, and Robert West, Do lla-
+mas work in English? on the latent language of multilingual transformers, Proceed-
+ings of the 62nd Annual Meeting of the Association for Computational Linguistics
+(Volume 1: Long Papers) (Bangkok, Thailand) (Lun-Wei Ku, Andr´e Martins, and
+Vivek Srikumar, eds.), Association for Computational Linguistics, August 2024,
+pp. 15366–15394.
+16. Ziyi Yang, Yinfei Yang, Daniel Cer, and Eric Darve, A simple and effective method
+to eliminate the self language bias in multilingual representations, Proceedings of
+the 2021 Conference on Empirical Methods in Natural Language Processing (Online
+and Punta Cana, Dominican Republic), Association for Computational Linguistics,
+November 2021, pp. 5825–5832.
+17. Haneul
+Yoo,
+Yongjin
+Yang,
+and
+Hwaran
+Lee,
+Code-switching
+red-teaming:
+LLM
+evaluation
+for
+safety
+and
+multilingual
+understanding,
+arXiv
+preprint
+arXiv:2406.15481 (2024).
+18. Andy Zou, Long Phan, Sarah Chen, James Campbell, Phillip Guo, Richard Ren,
+Alexander Pan, Xuwang Yin, Mantas Mazeika, Ann-Kathrin Dombrowski, Shash-
+wat Goel, Nathaniel Li, Michael J. Byun, Zifan Wang, Alex Mallen, Steven Basart,
+Sanmi Koyejo, Dawn Song, Matt Fredrikson, J. Zico Kolter, and Dan Hendrycks,
+Representation engineering: A top-down approach to ai transparency, 2023.
+Поступило 01 March 2026
+(A. Goncharov) Skolkovo Institute of Science and Technology
+E-mail: andrey.goncharov@skoltech.ru
+(N. Kondusov) Voronezh State University
+(A. Zaytsev) Skolkovo Institute of Science and Technology

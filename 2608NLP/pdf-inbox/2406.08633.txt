@@ -1,0 +1,1105 @@
+===== PAGE 1 =====
+Unraveling Code-Mixing Patterns in Migration Discourse:
+Automated Detection and Analysis of Online Conversations on Reddit
+Fedor Vitiugin, Sunok Lee, Henna Paakki, Anastasiia Chizhikova, Nitin Sawhney
+Department of Computer Science
+Aalto University, Finland
+Abstract
+The surge in global migration patterns underscores the imper-
+ative of integrating migrants seamlessly into host communi-
+ties, necessitating inclusive and trustworthy public services.
+Despite the Nordic countries’ robust public sector infrastruc-
+ture, recent immigrants often encounter barriers to access-
+ing these services, exacerbating social disparities and eroding
+trust. Addressing digital inequalities and linguistic diversity
+is paramount in this endeavor. This paper explores the uti-
+lization of code-mixing, a communication strategy prevalent
+among multilingual speakers, in migration-related discourse
+on social media platforms such as Reddit.
+We present Ensemble Learning for Multilingual Identifi-
+cation of Code-mixed Texts (ELMICT), a novel approach
+designed to automatically detect code-mixed messages in
+migration-related discussions. Leveraging ensemble learning
+techniques for combining multiple tokenizers’ outputs and
+pre-trained language models, ELMICT demonstrates high
+performance (with F1 more than 0.95) in identifying code-
+mixing across various languages and contexts, particularly in
+cross-lingual zero-shot conditions (with avg. F1 more than
+0.70). Moreover, the utilization of ELMICT helps to analyze
+the prevalence of code-mixing in migration-related threads
+compared to other thematic categories on Reddit, shedding
+light on the topics of concern to migrant communities.
+Our findings reveal insights into the communicative strate-
+gies employed by migrants on social media platforms, offer-
+ing implications for the development of inclusive digital pub-
+lic services and conversational systems. By addressing the
+research questions posed in this study, we contribute to the
+understanding of linguistic diversity in migration discourse
+and pave the way for more effective tools for building trust in
+multicultural societies.
+Introduction
+Between 2000 and 2020, global migration patterns wit-
+nessed significant shifts, with a 74% growth, equivalent to
+approximately 37 million people. Europe experienced an in-
+crease of 30 million migrants, closely followed by North
+America with 18 million, and Africa with 10 million mi-
+grants (McAuliffe et al. 2022). The escalating diversity em-
+phasizes the importance of seamlessly integrating migrants
+Copyright © 2024, Association for the Advancement of Artificial
+Intelligence (www.aaai.org). All rights reserved.
+language
+message
+M1
+English
+Moved here from France because my wife is Finnish. I
+enjoy it enough to want to stay here.
+M2
+code-mixed
+WOW, sounds great to me, man. OK, kiitos paljon for
+your answer! [EN] WOW, sounds great to me, man. OK,
+thanks a lot for your answer!
+M3
+code-switched
+Sun tarinas on yksi hyv¨a syy miksi oppia Englanti.
+And of course... you know what happen next. [EN]
+Her/his story is one good reason to learn English. And
+of course... you know what happen next. .
+M4
+Finnish
+Moikka! En oo sujuva suomen kieless¨a ja juuri nyt
+opiskelen suomen lukiossa. [EN] Hello! I’m not fluent
+in Finnish, and right now, I’m studying at a Finnish high
+school.
+Table 1: Examples of code-mixed and non-mixed messages
+for English-Finnish pair. (Note: messages were paraphrased
+for anonymity.)
+into local processes and requires public services to facilitate
+smooth adaptation.
+The Nordic countries have well-functioning and mostly
+equitable public sector services, earning the trust of a ma-
+jority of citizens. However, this trust and efficiency do not
+always extend to recent immigrants and migrant communi-
+ties residing in the region. For many migrants, these pub-
+lic services may seem inaccessible, lacking inclusivity or
+trustworthiness, which significantly undermines their inte-
+gration (Yeasmin et al. 2020; Intke-Hern´andez et al. 2015).
+Digital inequalities among specific groups can exacerbate
+social disparities, further marginalizing them and potentially
+undermining trust (Madianou 2015). Therefore, it’s vital
+for local municipalities to prioritize objectives like enhanc-
+ing integration, promoting inclusion, and supporting migrant
+communities. Many cities are actively working to create in-
+novative digital public services, such as chatbots, especially
+in areas like healthcare, employment, and social services.
+However, it’s essential to ensure that these services are ac-
+cessible to users with diverse linguistic backgrounds and
+varying levels of digital literacy.
+In the public sector and non-profit organizations assist-
+ing migrants, language is not restricted to a single mode
+of expression. Multilingual speakers tend to interleave two
+or more languages when communicating, a phenomenon
+arXiv:2406.08633v1  [cs.CL]  12 Jun 2024
+
+===== PAGE 2 =====
+known as code-mixing. This strategy has become increas-
+ingly prevalent in today’s diverse linguistic and cultural
+landscape (Gumperz 1982). Due to this communication
+style, migrants naturally lean towards code-mixing to more
+effectively convey their circumstances and context.
+A recent study highlights the complex linguistic prac-
+tices employed by migrants in computer-mediated commu-
+nication (McEntee-Atalianis, Ateek, and Gardner-Chloros
+2023; Ikeh 2023). Social media platforms provide bilingual
+users with a dynamic space to navigate their multiple identi-
+ties online post-resettlement (Harwood et al. 2019; Gardner-
+Chloros 2020). Our research focuses on the Reddit platform,
+selected not only for the availability of data collection but
+also for its community-based structure and user-generated
+thread labels, simplifying content analysis.
+Table 1 demonstrates examples of various code-mixed,
+code-switched, and non-mixed messages. M1 and M4
+are prototypical single-language messages in English and
+Finnish, respectively. M2 is an example of a code-mixed
+message, where the user included the Finnish phrase “kiitos
+paljon” instead of “thanks a lot” in his English message. Fi-
+nally, M3 is an example of a code-switched message, where
+the user starts their text with a Finnish sentence to explain
+the situation and continues with an English sentence. We
+will explain the difference between code-mixing and code-
+switching in the next section.
+The emergence of Multilingual Large Language Mod-
+els (LLMs) has demonstrated exceptional capabilities
+across various tasks (Chang et al. 2023; Zahera et al.
+2023), showcasing state-of-the-art performance through
+zero-shot or few-shot methods. While extensive research
+has explored their monolingual capabilities, their poten-
+tial in cross-lingual communication remains relatively un-
+explored (Zhang et al. 2023). However, current intelligence-
+based conversational systems often fail to meet the commu-
+nicative expectations of multilingual migrant users, resulting
+in linguistic and cultural barriers. Consequently, there is an
+urgent need for the public sector to evolve these systems,
+considering the communication needs of migrants.
+We explore migrants’ information requests shared on so-
+cial media. Our paper addresses the following research ques-
+tions:
+RQ1: Can we automatically identify code-mixed social
+media messages from Reddit related to migration to Fin-
+land?
+RQ2: How proficiently can the proposed approach iden-
+tify instances of code-mixing in social media conversations
+in cross-lingual zero-shot conditions
+RQ3: Which content topics exhibit a high proportion of
+code-mixed messages, and what are the differences in code-
+mixing usage between migration-related threads and threads
+in other user-defined categories?
+To tackle the first two questions, we introduced a flexible
+approach named Ensemble Learning for Multilingual Identi-
+fication of Code-mixed Texts (ELMICT), which relies on en-
+semble learning techniques (Abimannan et al. 2023). This
+method effectively detects code-mixed social media mes-
+sages. Our model integrates outputs from multiple tokeniz-
+ers and fine-tuned pre-trained language models to identify
+texts containing code-mixing. We illustrate that using tok-
+enizers or fine-tuned models separately yields lower perfor-
+mance and is less robust, particularly for texts containing
+out-of-vocabulary tokens. In addressing the third question,
+we calculate the proportion of code-mixing messages across
+various topics, including migration, tourism, politics, and
+general discussions.
+The subsequent section of this paper will first present re-
+lated research, followed by an explanation of our proposed
+method for detecting code-mixed social media messages and
+the setup for topic modeling of detected messages. Follow-
+ing this, we will detail our experimental setup and analyze
+the results. Finally, we will offer our conclusions and outline
+potential future work.
+Related Work
+In this section, we will discuss relevant works about code-
+mixing, and research on its usage in migrant communica-
+tion. We also discuss methods for code-mixed text identi-
+fication and the application of these methods for different
+tasks.
+Code-Mixing and Code-Switching
+Central to this work is the linguistic concept called “code-
+mixing”, how it differs from “code-switching” and other
+language alternating techniques. Both are commonly used
+throughout the world, and are especially crucial for com-
+munities of migrants, expats, bilinguals, etc (Gardner-
+Chloros 2020; McEntee-Atalianis, Ateek, and Gardner-
+Chloros 2023). These occur when two languages are used
+spontaneously in one sentence or expression.
+Although the main purpose of our work is to research
+code-mixing in migration-related communication, we also
+wish to provide key definitions and discuss the differences
+between code-mixing and code-switching, as these are cru-
+cial for this study. More detailed information on these phe-
+nomena provided in related linguistics research cited in this
+subsection.
+Many scholars have attempted to define code-switching
+and code-mixing. Weinreich, a leading researcher on bilin-
+gualism, has claimed that “the ideal bilingual is some-
+one who is able to switch between languages when re-
+quired to do so by changes in the situation but does not
+switch when the speech situation is unchanged and certainly
+not within a single sentence” (Weinreich 1953). Special-
+ists in code switching, however, recognize code switching
+as a functional practice and as a sign of bilingual compe-
+tence (Toribio 2001). Competence includes two aspects: flu-
+ency in speaking two or more languages and comprehen-
+sive understanding of them, even if speaking fluently is not
+necessary. It’s evident that code-switching requires a high
+level of proficiency in multiple languages, rather than being
+a consequence of insufficient knowledge in one or the other
+language (Poplack et al. 2000).
+Code-switching refers to the “use of two or more lan-
+guages in the same conversation, usually within the same
+conversational turn, or even within the same sentence of that
+turn” (Myers-Scotton 1993). Code-switching is the shifting
+by a speaker from language A to language B.
+
+===== PAGE 3 =====
+There are varying definitions of code-mixing. It’s de-
+scribed as instances where a mix between the grammar of
+one language and another language is employed without
+changing the grammar of the initial language used (Mab-
+ule 2015). On the other hand, “Conversational code-mixing
+involves the deliberate mixing of two languages without an
+associated topic change” (Wardhaugh and Fuller 2021). The
+definition indicates that code-mixing is typically used as
+a solidarity marker in multilingual communities. Similarly,
+according to other views, in code-mixing speakers switch
+between languages even within words (e.g. Spanglish or Fin-
+glish as a mixture of the English and Spanish or English and
+Finnish languages relatively) and/or phrases (Milroy and
+Muysken 1995; Auer 2013)
+In this paper, the term “code-mixing” is used to indicate a
+switch between languages, in which a single word or phrase
+from one language (here: Finnish, Spanish, or Korean) is
+integrated into another language (here: English).
+The Role of Code-Mixing in Migrant
+Communication
+Code-mixing among multilingual speakers commonly ob-
+served in close relationships, particularly when speaking
+with friends and family who share similar linguistic and
+cultural backgrounds (Wulandari 2021). However, speakers
+tend to avoid code-mixing if they’re unsure how their inter-
+locutors will react. Moreover, even when speakers are aware
+of their conversational partner’s language proficiency, they
+may adjust their language usage to match the partner’s code-
+mixing style and frequency, especially if trust is perceived to
+be lacking (Kusumawati and Prihadi 2023). This highlights
+how code-mixing serves as an indicator of trust and inti-
+macy levels among multilingual speakers (Choi, Lee, and
+Lee 2023).
+From the civil service practitioners’ side, it is critical to
+make sure that services are accessible at the user experi-
+ence level and linguistically, rather than broader aspects of
+its design and impact. Practitioners cited the lack of staff di-
+versity and linguistic exclusion as the main challenges for
+better inclusion of citizens in such services (Drobotowicz
+et al. 2023). On the other hand, migrants may encounter
+challenges, particularly in critical contexts such as local gov-
+ernment offices and hospitals, which place greater demands
+on language proficiency (St John 2023). Moreover, personi-
+fication of the conversational agent could increase engage-
+ment (Ostrowski et al. 2021), increase trust and relation-
+ships (Schaefer et al. 2016; Luria et al. 2019).
+Conversational agents fail to understand users for many
+reasons, multilingual users often blame their unique speech
+behavior—code-mixing and drop the conversation or think
+they have lost control of the device because they do not un-
+derstand the reason for the failure (Ponnusamy et al. 2022).
+Experiences like this could greatly diminish the users’ well-
+established trust and intimacy with the conversational agent.
+For this reason, a code-mixing conversational agent should
+be designed to make clear statements and detailed explana-
+tions of their failure to prevent the multilingual users from
+getting frustrated by unnecessary misunderstanding (Yap,
+Lee, and Roto 2021).
+Recent study participants prefer their agent to avoid un-
+necessary code-mixing but understand its usage in certain
+contexts. This preference originates from experiences where
+they were perceived as code-mixing due to language limita-
+tions and the importance of trust for acceptance in relation-
+ships. Additionally, designers could enhance trust and inti-
+macy with code-mixing users by giving the agent a persona
+with diverse cultural or language backgrounds and similar
+code-mixing skills. This would enable users to contact the
+agent, similar to how they interact with other multilingual
+individuals (Choi, Lee, and Lee 2023).
+Code-Mixed Data Processing
+Recently, there has been a growing interest in the develop-
+ment of language models and technologies tailored for han-
+dling code-mixed content. Researchers have delved into ex-
+ploring joint models capable of simultaneously performing
+language identification and part-of-speech tagging (Barman,
+Wagner, and Foster 2016). This dual-level language identifi-
+cation spans both word and sentence levels (Rani, McCrae,
+and Fransen 2022). A method, based on the UDLDI model,
+employs a CNN architecture that incorporates enriched sen-
+tence and word embeddings (Goswami et al. 2020).
+Addressing the complexities of code-mixed content, cer-
+tain studies have simplified texts by transforming them into
+a monolingual form through back-transliteration (Dowlagar
+and Mamidi 2021; Gautam et al. 2021). However, the effi-
+cacy of these techniques heavily relies on the accuracy of
+transliteration and translation methods employed.
+Transfer Learning approaches have gained widespread at-
+tention in leveraging pre-trained language models for ana-
+lyzing code-mixed data (Aguilar and Solorio 2019; Krishnan
+et al. 2021). Yet, the substitution of tokens in cross-lingual
+transfer learning can introduce grammatical inconsistencies
+in the resultant sentences, potentially impairing performance
+on token-sensitive tasks. To overcome this challenge, token-
+alignment techniques have emerged, facilitating not only to-
+ken replacement but also considering contextual similarity
+to ensure grammatical coherence in both training and in-
+ference stages (Feng, Li, and Koehn 2022). The word seg-
+mentation method has shown promising results in code-
+mixed data processing. Utilization of a linguistics-based
+toolkit is maintaining the quality of monolingual transla-
+tion with Hokkien-Mandarin code-mixed texts, widespread
+among Chinese immigrants (Lu et al. 2023).
+A review of recent literature underscores a pronounced
+emphasis on the tokenization issue. Indeed, accurate tok-
+enization and word segmentation significantly enhance per-
+formance in code-mixing-related tasks. Furthermore, many
+studies have used synthetic training data, posing challenges
+for further analysis of real-world scenarios where users em-
+ploy code-mixing in their communication.
+Method
+This study aims to explore the usage of code-mixing by
+migrants in social media. In this section, we present a
+supervised-learning classification model for detecting code-
+mixing in social media and describe methods used for ana-
+lyzing code-mixed texts.
+
+===== PAGE 4 =====
+Figure 1: Example of differences in single-language pre-
+trained model tokenizer outputs.
+Text Classification
+Recent work in text classification analysis clearly demon-
+strates the necessity of precise word segmentation and tok-
+enization. Compound words, which are quite rare in the ma-
+jority of languages, play a significant role in Finnish. Fig-
+ure 1 demonstrates the difference in English and Finnish
+pre-trained tokenizer outputs for the word “terveyskeskus”
+which means “public health center”. This word is widely
+used not only by locals but also migrants, and plays an im-
+portant role in their daily vocabulary.
+The Ensemble Learning for Multilingual Identification of
+Code-mixed Texts (ELMICT) model aims to merge pre-
+trained language models with features generated by tokeniz-
+ers through ensemble modeling. To ensure the classifica-
+tion model receives comprehensive information, we exper-
+imented with various combinations of tokenizer outputs, ul-
+timately retaining four of them:
+• English BPE-tokenizer – English language is used as
+the basic language in our datasets, so we choose the
+tokenizer from the most popular 1 English transformer
+model;
+• local language BPE-tokenizer – Finnish, Korean, or
+Spanish BPE-tokenizer for related datasets;
+• multilingual BPE-tokenizer – we found that for some
+cases, multilingual tokenizers are also providing correct
+outputs and include multilingual BERT in our model;
+• whitespace tokenizer – NLTK whitespace tokenizer pro-
+vides additional information as the most naive method.
+Two other components of the proposed model are a lan-
+guage detection tool and a fine-tuned pre-trained trans-
+former model for code-mixing detection. For language de-
+tection, lingua Python library 2 was used in mixed-language
+mode. The model received information about the existence
+of English and local wordsphrases in the target text. XLM-
+RoBERTa was used for contextual detection of code-mixing.
+We fine-tuned a pre-trained model for the sequence classifi-
+cation task on English-Finnish texts (for both monolingual
+and cross-lingual tasks).
+The architecture of ELMICT model presented in Figure 2
+has combined two approaches: contextual and feature-based.
+For the contextual approach, we fine-tune the multilingual
+pre-trained large language model. Soft labels output from
+1based on HuggingFace.com model popularity statistics
+2https://github.com/pemistahl/lingua-py
+Figure 2: ELMICT model architecture.
+the fine-tuned model were used as features for the ensem-
+ble model. As features, we used information extracted by 4
+tokenizers.
+Our approach is based on the intuition that specialized to-
+kenizers (Finnish tokenizer for a word in Finnish) will split
+relevant text into tokens more accurately, while unspecial-
+ized tokenizers (like English applied for word in Finnish)
+will generate more tokens (parts of word). It means that
+when an ensemble learning model receives the result of tok-
+enization from different models, it can track which tokeniza-
+tion split of out-of-vocabulary tokens was done wrong.
+Topic Modeling
+To analyze the difference in migrant-related and general
+Reddit posts, we applied BERTopic technique (Grootendorst
+2022) for topic modeling. The method utilizes BERT em-
+beddings (Devlin et al. 2018) to cluster the texts and lever-
+ages c-TF-IDF algorithm to further generate topic represen-
+tations.
+First, we utilized sentence embeddings to convert input
+documents into numerical representations, enabling the cap-
+ture of semantic similarity between documents. Second,
+we employed the UMAP dimensionality reduction algo-
+rithm (McInnes et al. 2018) to address the high dimension-
+ality of embeddings, which can make clustering challenging
+due to the curse of dimensionality. The clustering algorithm
+was used HDBSCAN (McInnes, Healy, and Astels 2017),
+the default for BERTopic. Third, we experimented with var-
+ious topic representation parameters and decided to use uni-
+and bi-grams only. Finally, we tested different minimal topic
+sizes and determined a threshold of 0.3% of the original
+dataset size. These steps resulted in not only a high coher-
+ence score of 0.8 but also in topics that are interpretable by
+humans, which we further analyze in-depth.
+Model Implementation
+We maintain the same number of layers as the original pre-
+trained model – 24 layers for XML-RoBERTa (Conneau
+et al. 2019). For the model’s fine-tuning, we used 0.5 ∗10−5
+learning rate, 10 epochs. The number of frozen layers for
+
+===== PAGE 5 =====
+Community
+Unlabelled
+Migration
+Non-mixed
+Code-mixed
+r/GoingToSpain
+39871
+3514
+878
+122
+r/Finland
+174212
+12632
+2055
+249
+r/korea
+130388
+3337
+973
+27
+Table 2: Dataset statistics.
+each model was detected by grid search. The model was
+trained on NVIDIA A100-SXM4 with 40Gb GPU RAM.
+Experiment Setup
+Data collection and annotation
+We collected posts and comments through the official Reddit
+API 3 from three country-related communities (subreddits):
+r/Finland, r/korea, and r/GoingToSpain. All three communi-
+ties primarily use English, making them more accessible for
+migrants. Each community has user-generated topic-related
+labels known as “flair”, including migration-related flair.
+All messages collected from location related communi-
+ties were manually annotated by one human assessor with
+living experience in the corresponding area and language
+proficiency both in English and the code-mixed language.
+Additionally, we enlisted two individuals residing in each
+location to label 100 random messages from their respective
+communities to calculate assessor agreement. The Krippen-
+dorff’s alpha for r/GoingToSpain is 0.87, for r/Finland is
+0.75, and for r/korea – 0.92.
+The labeling task was to assign one of the two classes for
+determining whether a given message is code-mixed or not
+for a target language pair. For uncertain words, the authors
+consulted with individuals, who are both proficient or native
+in target languages and currently living in the target country.
+Before dataset annotation, we conducted a simple prepro-
+cessing step to filter out all uninformative tweets (based on
+manual analysis of a random sample, more than 92% of mes-
+sages with length ≤4 tokens are uninformative). Table 2
+presents the quantity of train and test instances for each cat-
+egory, as well as unlabeled text entities.
+During the process of labelling data related to Finland,
+several types of Finnish concepts were detected. The first
+group consists of cultural concepts and includes words like
+“sisu” (strength of will), “handknit villasukat” (hand knitted
+wool socks as marker of coziness), and “mummola” (grand-
+mother’s house). The second group contains words related to
+civil organizations and public services, like “tilastokeskus”
+(national statistical institution in Finland), “terveyskeskus”
+(public health center). The third group contains figurative
+compound words: “piruntorjuntabunkkeri” (church), “be-
+tonihelvetti” (concrete buildings). The final group is obscene
+language and slang: “mamu”; “ryss¨a”. Code-mixing gener-
+ally occurs without special marking within the sentence, or
+sometimes marked by quotation marks.
+In the context of texts related to migration in Korea, code-
+mixing has been observed predominantly with the use of
+Korean terms that reflect specific cultural and social con-
+texts: “mukbanger”, “닭발”, “hagwon”, and “chaebol”, etc.
+3https://www.reddit.com/dev/api/
+In code-switching texts, Korean words are romanized, mean-
+ing they are transcribed phonetically into English, rather
+than being written directly in Hangul, the Korean alpha-
+bet. For example, due to Korean culture’s unique practice
+of using specific titles instead of names to address some-
+one, terms like “unnie”, which means older sister, or re-
+ferring to a child’s father by combining “Papa” with the
+child’s name, are used. Additionally, “mukbanger”, which
+refers to a YouTuber who broadcasts their eating, and “닭발”
+(translated as “chicken feet”), a word included to represent
+a facet of Korean food culture, illustrate the expression of
+cultural phenomena related to food that originated in Korea.
+Similarly, although “hagwon”, denoting a private tutoring
+academy, can be translated into English, its use more pre-
+cisely reflects Korea’s unique educational culture. Moreover,
+“다문화” (damunhwa) is used to refer to people from di-
+verse cultural backgrounds within Korean society; although
+’migrant’ exists as an English equivalent, “damunhwa” is
+used to convey the societal context more accurately. Notably,
+terms like “chaebol” (representing rich people or conglom-
+erates) and “JY Lee”, a quintessential figure in Korean chae-
+bol culture, are utilized to denote Korea’s distinctive corpo-
+rate culture.
+In the Spanish migration context, the majority of cases
+in which there was code-switching occurred are specific bu-
+reaucratic terms like “extranjeria” (foreigner), “empadron-
+amiento” (census), “pareja de hecho” (domestic partnership)
+etc. These words and phrases do not have a direct English
+translation and in the context of conversations related to mi-
+gration, it is important to be precise with the terms, so the
+users use the right Spanish terminology. Interestingly, some-
+times they do that with terms that could be easily translated
+to English: “Generally you should be fine with the seguridad
+social (social security)...” Other, much less frequent cases in-
+clude the insertion of Spanish slang “guirris” (tourists from
+Northern Europe or UK) and the usage of greetings (Hola
+(Hi)! at the beginning of a message in English).
+Schemes
+To evaluate the proposed method, we compared it with sev-
+eral state-of-the-art models. The full list of proposed mod-
+eling schemes for evaluation is the following (* denotes our
+proposed models and others are the baselines):
+• lingua – library for language identification based on
+model and data provided by (Biemann et al. 2004);
+• Random Forest – classification model outputs of ensem-
+ble of tokenizers;
+• Adaptive Boosting – classification model outputs of en-
+semble of tokenizers;
+• Gradient Boosting – classification model outputs of en-
+semble of tokenizers;
+• XLM-RoBERTa – multilingual XLM-RoBERTa fine-
+tuned for code-mixed texts identification;
+• ChatGPT-3.5 – zero-shot setting for detecting code-
+mixed texts with use of OpenAI’s ChatGPT-3.5;
+• * ELMICT – the model based on Ensemble Learning for
+Multilingual Identification of Code-mixed Texts.
+
+===== PAGE 6 =====
+Model Scheme
+ACC
+F1
+AUC
+lingua
+78.70±2.18
+62.39±3.16
+73.20±5.28
+Random Forest
+71.74±0.08
+71.55±0.27
+71.85±0.64
+Adaptive Boosting
+69.57±5.75
+69.17±6.21
+69.77±6.55
+Gradient Boosting
+68.70±6.81
+68.04±7.65
+68.86±6.33
+XLM-RoBERTa
+97.05±0.62
+92.08±1.74
+91.60±1.23
+ChatGPT-3.5
+77.45±1.62
+54.82±3.28
+67.28±4.26
+* ELMICT
+97.55±0.13
+92.84±4.22
+94.90±2.01
+Table 3: Comparison with baselines. Results of binary clas-
+sification. The best performances are in bold. Training
+and developing data is code-mixing messages in English-
+Finnish. 5-fold CV. ∗denotes the proposed models.
+We utilize three metrics to assess the effectiveness of clas-
+sification models for detection of code-mixing, which are
+Accuracy (ACC), Area Under the Receiver Operating Char-
+acteristic Curve (AUC), and macro F-measure (F1), in align-
+ment with practices of evaluation of binary text classifica-
+tion.
+Result Analysis and Discussion
+We begin by presenting the performance results of the pro-
+posed ELMICT model compared to baseline schemes for re-
+search question RQ1. This is followed by an analysis of the
+proposed model’s performance for cross-lingual classifica-
+tion for RQ2, and a detailed examination of social media
+content featuring code-mixing for RQ3.
+English-Finnish Code-Mixing Detection
+Initially, we assess our model’s performance on English-
+Finnish code-mixed messages. We employ 5-fold cross-
+validation to randomly split the data into train-dev chunks in
+a 90-10 proportion. Table 3 illustrates the performance eval-
+uation of the ELMICT model compared to other schemes,
+addressing RQ1. The results indicate that our proposed
+model consistently outperforms the baselines across all met-
+rics. Particularly noteworthy is the superior performance
+of the ELMICT model compared to the fine-tuned XLM-
+RoBERTa model. This underscores the significance of lever-
+aging features generated by multiple tokenizers and a lan-
+guage detector module for code-mixing text detection tasks.
+Additionally, the performance of Random Forest and lin-
+gua models demonstrates that utilizing features without soft
+labels generated by fine-tuned pre-trained language mod-
+els underperform. Moreover, the classification results high-
+light the limitations of ChatGPT-3.5 in zero-shot learning
+settings. While we don’t explore fine-tuning or prompt-
+engineering approaches, it’s plausible that further enhance-
+ments could improve the performance of LLMs. Lastly,
+the experiment reveals that Random Forest outperforms
+other ensemble models like Adaptive Boosting and Gradient
+Boosting. We exclusively utilize Random Forest for ensem-
+ble modeling in further experiments.
+In addition to cross-validation, we test the higher per-
+forming models on a test batch, which contains data from
+different threads and is excluded from train and develop-
+ment batches used for models’ training and fine-tuning.
+Model Scheme
+ACC
+F1
+AUC
+lingua
+81.82
+81.64
+81.55
+XLM-RoBERTa
+93.94
+93.93
+93.93
+ChatGPT-3.5
+74.75
+74.58
+74.54
+* ELMICT
+97.64
+97.64
+97.62
+Table 4: Comparison with baselines. Results of binary clas-
+sification. The best performances are in bold. Testing data
+is code-mixing messages in English-Finnish. ∗denotes the
+proposed models.
+Model Scheme
+ACC
+F1
+AUC
+English-Korean
+lingua
+97.10
+49.26
+50.00
+XLM-RoBERTa
+93.00
+63.84
+74.65
+ChatGPT-3.5
+92.40
+57.58
+63.14
+* ELMICT
+96.70
+66.80
+64.85
+English-Spanish
+lingua
+87.80
+46.75
+50.00
+XLM-RoBERTa
+88.60
+76.88
+81.16
+ChatGPT-3.5
+48.80
+44.38
+64.14
+* ELMICT
+90.40
+73.57
+70.18
+Table 5: Comparison with baselines. Results of cross-lingual
+binary classification. The best performances are in bold.
+Testing data is code-mixing messages in English-Korean
+and English-Spanish. ∗denotes the proposed models.
+Additional experiments demonstrate the robustness of our
+model. The test batch includes 297 texts (131 code-mixed
+and 166 non-code-mixed texts). Table 4 demonstrates com-
+parable performance for the majority of schemes, and sig-
+nificant improvement in the performance of lingua detec-
+tor. Furthermore, the experiment on test data batch helps to
+prove the usage of ELMICT for the classification English-
+Finnish dataset to answer RQ3. While we expected a drop in
+model performance because of possible overfitting, the per-
+formance is even higher.
+Cross-lingual Code-Mixing Detection
+In addition to monolingual classification tasks, there are also
+cross-lingual classification settings where the languages in
+the training and testing data are different. To assess the
+proposed framework’s cross-lingual capability, we utilize a
+zero-shot setting, where we train and validate classification
+schemes on the data of English-Finnish dataset and test the
+model on the data from the other dataset (English-Korean
+or English-Spanish). For test data classification, we use the
+same models from the previous experiment. The complete
+findings of the cross-lingual classification are outlined in Ta-
+ble 5.
+In comparison to the other schemes, ELMICT ex-
+hibits comparable performance with the fine-tuned XLM-
+RoBERTa model. ELMICT demonstrates higher ACC for
+both datasets, while because of strong imbalance in both
+datasets, the other two metrics are more relevant. While
+for English-Korean messages ELMICT has higher F1, for
+English-Spanish fine-tuned XLM-RoBERTa has higher F1.
+Moreover, XLM-RoBERTa demonstrates higher AUC for
+
+===== PAGE 7 =====
+both datasets. While at the same time, two other schemes
+demonstrate random results with AUC equals 50%.
+Topic Analysis
+Figure 3 presents the top-10 most popular topics with use of
+code-mixing in threads with “Immigration” flair. The high-
+est level of code-mixing usage in migration-related posts
+was detected in the topic related to guns (patruunatehdas –
+cartridge factory; tarkkuuskiv¨a¨ari – sniper rifle). The sec-
+ond most topic with high code-mixing usage is about em-
+ployment and bank accounts in Finland (ty¨o- ja elinkeino-
+toimisto (TE) – Employment and Economic Development
+Office; pankki – bank) because they are widely used not
+only in relation to financial services, but also for digital au-
+thentication in various services. The third topic with a high
+level of code-mixed messages is about the Russo-Ukrainian
+war and Finland’s membership in NATO (siviilipalvelus –
+civil service; taisteli puolella – fought on the side). The
+other seven topics could be divided into two groups. The
+first one includes everyday life questions that could be
+addressed during migration: sauna (l¨oyly – steam), shop-
+ping (kierr¨atyskeskus – recycling center), apartment rent-
+ing (asunto – apartment), healthcare (hoito – care, therapy),
+and public utilities (p¨orssis¨ahk¨o – exchange electricity, also
+known as spot electricity).
+The second group is about popular cultural media content:
+local music and movie subtitles. These topics include many
+words and phrases in Finnish related to song and movie ti-
+tles and artists’ names. The latter group should not be classi-
+fied as code-mixing because all these words and phrases are
+proper names. However, to avoid the classification of these
+messages as code-mixing is a separate challenging NLP-
+task. It could be tackled by applying a multilingual named
+entity recognition model in the future. This would have re-
+quired additional experiments, though, which were beyond
+the scope of this paper.
+Conclusions and Future Work
+This paper explores code-mixing patterns in migration-
+related online conversations. Our proposed Ensemble Learn-
+ing for Multilingual Identification of Code-mixed Text
+(ELMICT) method allows for detection of messages with
+code-mixing in predominantly English-based datasets. The
+core idea of ELMICT is its use in combination with multiple
+tokenizers outputs and soft labels generated by a pre-trained
+language model. The utilization of context-based soft labels
+allows us to predict code-mixing usage in migration-related
+contexts (everyday life challenges and cultural nuances),
+while tokenizer’s outputs made models more robust in the
+new linguistic context. Experiments on multiple English-
+based datasets that included code-mixing with words from
+Finnish, Korean, or Spanish show that the proposed model
+outperforms several baselines in the classification task. Uti-
+lization of ELMICT allows us to analyse the usage of code-
+mixing in migration-related threads on r/Finland subreddit.
+The results of our analysis highlights a list of topics where
+code-mixing is highly predictable (housing market, shop-
+ping, public utilities, and healthcare), while also bringing
+Figure 3: Proportion of code-mixing messages per topic per
+flair in English-Finnish dataset.
+to light particular topics (guns and hunting) and temporal
+discourses (Russo-Ukrainian war and NATO membership of
+Finland) where code-mixing was seen be be more widely
+used.
+The ELMICT model holds promising potential for ap-
+plication in public services that can utilize code-mixing
+in conversational agents and enhance trusting relations
+with migrants by appropriate usage of specific vocabular-
+ies. This proposed model could be a part of the pipeline
+of model training in the Retrieval-Augmented Genera-
+tion (RAG) module or database refinement. By harness-
+ing the capabilities of the ELMICT model, organizations
+can strengthen their customer relationships by building trust
+based on communication and potentially innovate new so-
+lutions, grounded in the vocabulary that unites locals and
+migrants. The versatility and adaptability of ELMICT with
+the use of different language-related tokenizers beyond its
+initial scope could be one of the exploratory directions for
+future work.
+There are certain limitations to our study that future work
+could address. First, the dataset we used for experimenta-
+tion only contains messages posted during a limited time
+and contains information from only 3 subreddits. To improve
+the model’s performance across various language pairs of
+code-mixing, it would be valuable to extend this dataset to
+include data collected over a longer period, more diverse
+topics, and additional languages. Second, the topic analysis
+highlights the necessity of applying additional preprocessing
+
+===== PAGE 8 =====
+steps, such as named entities recognition for proper names
+related to popular culture (titles, artists, etc.) Third, our pro-
+posed model only identifies text contained in code-mixing,
+while for building conversational agents or any other appli-
+cation of code-mixed vocabulary, it’s necessary to extract
+these tokens. Usage of ELMICT will help to increase the ef-
+ficiency of data annotation for the token classification task
+because of the automated filtering of monolingual texts.
+Reproducibility
+Datasets and code for the experiments described in this pa-
+per will be available for research purposes at the public
+repository https://github.com/vitiugin/elmict.
+Broader Impact and Ethics Statement
+For multilingual speakers, code-mixing is a communica-
+tion method typically used when they are in a relaxed state
+and with people with whom they share close relationships.
+This linguistic strategy is employed specifically when the
+multilingual speaker has a trustful and intimate relationship
+with another person who shares similar linguistic and cul-
+tural backgrounds (Wulandari 2021; Kusumawati and Pri-
+hadi 2023). In this context, to effectively build a trusting
+relationship between multilingual migrants, counselors, and
+conversational agents, incorporating the feature of code-
+mixing into the system is necessary. This adaptation would
+help migrants perceive that public services using human and
+conversational agents share similar linguistic and cultural
+backgrounds, fostering a sense of trust. However, we must
+ensure that such perceptions of trust induced by conver-
+sational agents using code-mixing in conversations do not
+make users believe such systems to be infallible or anthro-
+pomorphised; hence designing such systems to incorporate
+explainable outputs and accurate content is crucial.
+Furthermore, previous research has shown that multilin-
+gual users experience similar feelings of pressure when con-
+versing with monolingual conversational agents as when
+conversing with strangers (Choi, Lee, and Lee 2023). This
+has led to the recognition that code-mixing conversational
+agents can provide multilingual users with a feeling of in-
+clusion and acceptance in society. In recognizing the deep
+connection between social integration and trust formation
+during the migration process (Dinesen and Hooghe 2010),
+it becomes evident that there is a significant opportunity for
+conversational agents to aid in this process. By providing a
+window of opportunity for migrants to build trust with pub-
+lic services, conversational agents can play a role in support-
+ing migrants (and their human counselors) as they adapt to
+and integrate into their new environment. Aligning with this,
+it is of utmost importance to build relationships between mi-
+grants, human counselors, and conversational agents as part
+of a system of public services that can promote social in-
+tegration and acceptance while migrants adapt to their new
+environment. As a result, these code-mixed digital offerings
+can be leveraged well to support the social integration of mi-
+grants, providing a pivotal step in promoting more inclusive
+public sector services.
+We recognize that there are many ethical implications of
+this work related to discrimination, misuse and privacy of
+end-users. Furthermore, we assume that language identity
+of users such as code-mixing level could be used for profil-
+ing, may result in discriminatory practices. Since we demon-
+strate the potential to identify such attributes on social me-
+dia, we are aware of how our research could be misused and
+abused, discriminating migrants (Yim and Cl´ement 2019;
+Faingold 2022; Ekwere 2022).
+To protect privacy, we refrain from disclosing sensitive
+personal information. Given Reddit’s anonymous nature and
+the absence of mandatory personal data sharing, we commit
+to not sharing collected data that could be used to identify
+individuals. For reproducibility, we only provide comment
+IDs and code-mixing binary labels, keeping users’ right to
+delete their data in the future if they choose.
+We also strongly encourage future studies to consider the
+ethical dimensions of detecting language-related character-
+istics in social media texts, from study inception to final re-
+search dissemination.
+Acknowledgments
+This work is supported by the Trust-M research project,
+a partnership between Aalto University, University of
+Helsinki, Tampere University, and the City of Espoo, funded
+in-part by a grant from the Strategic Research Council
+(SRC) in Finland. The authors also express their deep grati-
+tude to CRAI-CIS research group members at Aalto Univer-
+sity who helped in experimental setup and provided valuable
+insights.
+References
+Abimannan, S.; El-Alfy, E.-S. M.; Chang, Y.-S.; Hussain, S.;
+Shukla, S.; and Satheesh, D. 2023. Ensemble multifeatured
+deep learning models and applications: A survey. IEEE Ac-
+cess.
+Aguilar, G.; and Solorio, T. 2019. From English to code-
+switching: Transfer learning with strong morphological
+clues. arXiv preprint arXiv:1909.05158.
+Auer, P. 2013. Code-switching in conversation: Language,
+interaction and identity. Routledge.
+Barman, U.; Wagner, J.; and Foster, J. 2016. Part-of-speech
+tagging of code-mixed social media content: Pipeline, stack-
+ing and joint modelling. In Proceedings of the second work-
+shop on computational approaches to code switching, 30–
+39.
+Biemann, C.; Bordag, S.; Heyer, G.; Quasthoff, U.; and
+Wolff, C. 2004. Language-independent methods for com-
+piling monolingual lexical data. In Computational Linguis-
+tics and Intelligent Text Processing: 5th International Con-
+ference, CICLing 2004 Seoul, Korea, February 15-21, 2004
+Proceedings 5, 217–228. Springer.
+Chang, Y.; Wang, X.; Wang, J.; Wu, Y.; Yang, L.; Zhu, K.;
+Chen, H.; Yi, X.; Wang, C.; Wang, Y.; et al. 2023. A survey
+on evaluation of large language models. ACM Transactions
+on Intelligent Systems and Technology.
+Choi, Y. J.; Lee, M.; and Lee, S. 2023. Toward a Multi-
+lingual Conversational Agent: Challenges and Expectations
+of Code-mixing Multilingual Users. In Proceedings of the
+
+===== PAGE 9 =====
+2023 CHI Conference on Human Factors in Computing Sys-
+tems, 1–17.
+Conneau, A.; Khandelwal, K.; Goyal, N.; Chaudhary, V.;
+Wenzek, G.; Guzm´an, F.; Grave, E.; Ott, M.; Zettle-
+moyer, L.; and Stoyanov, V. 2019.
+Unsupervised cross-
+lingual representation learning at scale.
+arXiv preprint
+arXiv:1911.02116.
+Devlin, J.; Chang, M.-W.; Lee, K.; and Toutanova, K. 2018.
+Bert: Pre-training of deep bidirectional transformers for lan-
+guage understanding. arXiv preprint arXiv:1810.04805.
+Dinesen, P. T.; and Hooghe, M. 2010. When in Rome, do
+as the Romans do: The acculturation of generalized trust
+among immigrants in Western Europe.
+International Mi-
+gration Review, 44(3): 697–727.
+Dowlagar, S.; and Mamidi, R. 2021. A pre-trained trans-
+former and CNN model with joint language ID and part-
+of-speech tagging for code-mixed social-media text.
+In
+Proceedings of the International Conference on Recent Ad-
+vances in Natural Language Processing (RANLP 2021),
+367–374.
+Drobotowicz, K.; Truong, N. L.; Ylipulli, J.; Gonzalez Tor-
+res, A. P.; and Sawhney, N. 2023. Practitioners’ Perspectives
+on Inclusion and Civic Empowerment in Finnish Public Sec-
+tor AI. In Proceedings of the 11th International Conference
+on Communities and Technologies, 108–118.
+Ekwere, E. 2022. Language identity and discrimination in a
+multicultural society. European Journal of Linguistics, 1(2):
+1–12.
+Faingold, E. D. 2022. Language Rights for Minorities and
+the Right to Code-Switch in the United States Workplace. A
+Critical Examination of Language and Community, 1.
+Feng, Y.; Li, F.; and Koehn, P. 2022. Toward the limitation
+of code-switching in cross-lingual transfer. In Proceedings
+of the 2022 Conference on Empirical Methods in Natural
+Language Processing, 5966–5971.
+Gardner-Chloros, P. 2020. Contact and code-switching. The
+handbook of language contact, 181–199.
+Gautam, D.; Kodali, P.; Gupta, K.; Goel, A.; Shrivastava,
+M.; and Kumaraguru, P. 2021.
+Comet: Towards code-
+mixed translation using parallel monolingual sentences. In
+Proceedings of the Fifth Workshop on Computational Ap-
+proaches to Linguistic Code-Switching, 47–55.
+Goswami, K.; Sarkar, R.; Chakravarthi, B. R.; Fransen, T.;
+and McCrae, J. P. 2020. Unsupervised deep language and
+dialect identification for short texts. In Proceedings of the
+28th International Conference on Computational Linguis-
+tics, 1606–1617.
+Grootendorst, M. 2022.
+BERTopic: Neural topic model-
+ing with a class-based TF-IDF procedure. arXiv preprint
+arXiv:2203.05794.
+Gumperz, J. J. 1982. Discourse strategies. 1. Cambridge
+University Press.
+Harwood, A.; Karunasekera, S.; Vanni, M.; Falzon, L.; Pa-
+dia, P.; and Silva, A. 2019. Understanding multilingual com-
+munities through analysis of code-switching behaviors in so-
+cial media discussions. In 2019 IEEE International Confer-
+ence on Big Data (Big Data), 2274–2283. IEEE.
+Ikeh, M. C. 2023.
+Social Media as Tools for Social and
+Cultural Integration of Nigerian Migrants in Sweden.
+Intke-Hern´andez, M.; et al. 2015.
+Migrant stay-at-home
+mothers learning to eat and live the Finnish way. Nordic
+Journal of Migration Research, 5(2): 75–82.
+Krishnan, J.; Anastasopoulos, A.; Purohit, H.; and Rang-
+wala, H. 2021. Multilingual Code-Switching for Zero-Shot
+Cross-Lingual Intent Prediction and Slot Filling.
+In Pro-
+ceedings of the 1st Workshop on Multilingual Representa-
+tion Learning, 211–223.
+Kusumawati, N.; and Prihadi, P. 2023. Conversation Impli-
+cature and Code-Mixing in Mata Najwa’s Talk Show Exclu-
+sive Episode: Ganjar Pranowo and the World Cup. Inter-
+national Journal of Multicultural and Multireligious Under-
+standing, 10(5): 419–430.
+Lu, S.-E.; Lu, B.-H.; Lu, C.-Y.; and Tsai, R. T.-H. 2023.
+Exploring methods for building dialects-Mandarin code-
+mixing corpora: A case study in Taiwanese Hokkien. arXiv
+preprint arXiv:2301.08937.
+Luria, M.; Reig, S.; Tan, X. Z.; Steinfeld, A.; Forlizzi,
+J.; and Zimmerman, J. 2019.
+Re-Embodiment and Co-
+Embodiment: Exploration of social presence for robots and
+conversational agents. In Proceedings of the 2019 on De-
+signing Interactive Systems Conference, 633–644.
+Mabule, D. R. 2015. What is this? Is it code switching, code
+mixing or language alternating. Journal of Educational and
+Social Research, 5(1): 339–350.
+Madianou, M. 2015.
+Digital inequality and second-order
+disasters: Social media in the Typhoon Haiyan recovery. So-
+cial Media+ Society, 1(2): 2056305115603386.
+McAuliffe, M.; et al. 2022. World Migration Report 2022.
+McEntee-Atalianis, L.; Ateek, M.; and Gardner-Chloros, P.
+2023. Multilingual repertoires and identity in social media:
+Syrian refugees on Facebook. International Journal of Bilin-
+gualism, 27(5): 731–748.
+McInnes, L.; Healy, J.; and Astels, S. 2017. hdbscan: Hierar-
+chical density based clustering. The Journal of Open Source
+Software, 2(11): 205.
+McInnes, L.; Healy, J.; Saul, N.; and Großberger, L. 2018.
+UMAP: Uniform Manifold Approximation and Projection.
+Journal of Open Source Software, 3(29).
+Milroy, L.; and Muysken, P. 1995. One speaker, two lan-
+guages: Cross-disciplinary perspectives on code-switching,
+volume 10. Cambridge University Press.
+Myers-Scotton, C. 1993. Social motivations for codeswitch-
+ing: Evidence from Africa. Oxford University Press.
+Ostrowski, A. K.; Zygouras, V.; Park, H. W.; and Breazeal,
+C. 2021.
+Small group interactions with voice-user inter-
+faces: exploring social embodiment, rapport, and engage-
+ment. In Proceedings of the 2021 ACM/IEEE International
+Conference on Human-Robot Interaction, 322–331.
+Ponnusamy, P.; Ghias, A.; Yi, Y.; Yao, B.; Guo, C.; and
+Sarikaya, R. 2022. Feedback-based self-learning in large-
+scale conversational ai agents. AI magazine, 42(4): 43–56.
+Poplack, S.; et al. 2000.
+The English History of African
+American English. Blackwell Oxford.
+
+===== PAGE 10 =====
+Rani, P.; McCrae, J. P.; and Fransen, T. 2022. MHE: Code-
+Mixed Corpora for Similar Language Identification. In Pro-
+ceedings of the Thirteenth Language Resources and Evalu-
+ation Conference, 3425–3433.
+Schaefer, K. E.; Chen, J. Y.; Szalma, J. L.; and Hancock,
+P. A. 2016. A meta-analysis of factors influencing the devel-
+opment of trust in automation: Implications for understand-
+ing autonomy in future systems. Human factors, 58(3): 377–
+400.
+St John, O. 2023. Social Inclusion Through Multilingual As-
+sistants in Additional Language Learning. Social Inclusion,
+11(4): 145–155.
+Toribio, A. J. 2001. On the emergence of bilingual code-
+switching competence. Bilingualism: language and cogni-
+tion, 4(3): 203–231.
+Wardhaugh, R.; and Fuller, J. M. 2021. An introduction to
+sociolinguistics. John Wiley & Sons.
+Weinreich, U. 1953. Language in contact. the Hague, the
+Netherlands: Mouton.
+Wulandari, A. 2021.
+Code Switching and Code Mixing
+Study in ˆaC œHitam PutihˆaC Talk Show Program. Vivid:
+Journal of Language and Literature, 10(1): 1–5.
+Yap, C. E. L.; Lee, J.-J.; and Roto, V. 2021.
+How HCI
+interprets service design: a systematic literature review.
+In Human-Computer Interaction–INTERACT 2021: 18th
+IFIP TC 13 International Conference, Bari, Italy, August
+30–September 3, 2021, Proceedings, Part II 18, 259–280.
+Springer.
+Yeasmin, N.; et al. 2020. Immigration in the circumpolar
+north: Integration and resilience. Routledge.
+Yim, O.; and Cl´ement, R. 2019. “You’re a Juksing”: Ex-
+amining Cantonese–English Code-Switching as an Index of
+Identity. Journal of Language and Social Psychology, 38(4):
+479–495.
+Zahera, H. M.; Vitiugin, F.; Sherif, M. A.; Castillo, C.; and
+Ngonga Ngomo, A.-C. 2023. Using Pre-Trained Language
+Models for Abstractive DBPEDIA Summarization: A Com-
+parative Study. In Knowledge Graphs: Semantics, Machine
+Learning, and Languages, 19–37. IOS Press.
+Zhang, R.; et al. 2023.
+Multilingual Large Language
+Models Are Not (Yet) Code-Switchers.
+arXiv preprint
+arXiv:2305.14235.

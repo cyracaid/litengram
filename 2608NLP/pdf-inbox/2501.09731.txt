@@ -1,0 +1,4451 @@
+===== PAGE 1 =====
+Predictions as Surrogates:
+Revisiting Surrogate Outcomes in the Age of AI
+Wenlong Ji, Lihua Lei, Tijana Zrnic
+Stanford University
+June 23, 2026
+Abstract
+We establish a formal connection between the decades-old surrogate outcome model in biostatis-
+tics and economics and the emerging field of prediction-powered inference (PPI). The connection
+treats predictions from pre-trained models, prevalent in the age of AI, as cost-effective surrogates
+for expensive outcomes that are not fully observed. Building on the surrogate outcomes litera-
+ture, we develop recalibrated prediction-powered inference, a more efficient approach to statistical
+inference than existing PPI proposals. Our method departs from the existing proposals by using
+flexible machine learning techniques to learn the optimal “imputed loss” through a step we call
+recalibration. Importantly, the method always improves upon the estimator that relies solely on the
+data with available true outcomes, even when the optimal imputed loss is estimated imperfectly,
+and it achieves the smallest asymptotic variance among PPI estimators if the estimate is consistent.
+Computationally, our optimization objective is convex whenever the loss function that defines the
+target parameter is convex. We further analyze the benefits of recalibration, both theoretically
+and numerically, in several common scenarios where machine learning predictions systematically
+deviate from the outcome of interest. We demonstrate significant gains in effective sample size over
+existing PPI proposals via three applications leveraging state-of-the-art AI models.
+1
+Introduction
+In many scientific applications, the outcome of interest is costly or time-consuming to acquire. Surro-
+gate outcomes, sometimes referred to as auxiliary or proxy variables, are often collected to accelerate
+data analysis and improve statistical efficiency. Intuitively, surrogates are outcomes that are easy to
+obtain and highly correlated with the outcome of interest, which are usually not fully observed. Early
+developments of surrogate outcome models were motivated by clinical trials where measuring the pri-
+mary endpoint may be “unduly invasive, uncomfortable or expensive” [Prentice, 1989] and sometimes
+“confounded by secondary treatments or competing risks” [Wittes et al., 1989]. For example, Wittes
+et al. [1989] consider the peak cardiac enzyme level in the bloodstream as a surrogate for the damage
+to the heart muscle caused by a myocardial infarction. Other examples include the CD4 counts as
+a surrogate for HIV infection [Fleming et al., 1994], the acute disease status as a surrogate for the
+chronic disease [Pepe, 1992], and responses shortly after the trial as a surrogate for long-term outcomes
+in longitudinal studies with drop-outs [Post et al., 2010].
+Authors are ordered alphabetically. We thank Bin Nan and Jiwei Zhao for their helpful comments. L.L. and W.J.
+are grateful for the support of National Science Foundation grant DMS-2338464. T.Z. gratefully acknowledges support
+from Stanford Data Science.
+1
+arXiv:2501.09731v2  [stat.ML]  21 Jun 2026
+
+===== PAGE 2 =====
+Later on, surrogates have found applications in economics and marketing. For example, Chen et al.
+[2005] present a case study on estimating returns to schooling using the Current Population Survey
+(CPS). Ideally, the study would be based on employer-reported social security earnings, but these
+outcomes are only available for the subset of individuals who reported their social security numbers in
+the survey. As a result, Chen et al. use the household-reported income as a surrogate for the outcome
+of interest.
+Athey et al. [2019] study the effect of the Greater Avenues to Independence (GAIN)
+job training program on long-term labor market outcomes in California, surrogated by short-term
+employment and earnings. Kallus and Mao [2024] discuss an example of using digital ad clicks, which
+are available for all users, to surrogate visitations to brick-and-mortar stores, which are only observable
+for those who agree to share cellphone geolocation data. Recently, tech firms have leveraged online
+experiments run for two weeks or less as surrogates for the purpose of understanding the long-term
+effects of a newly launched feature [Athey et al., 2019, Gupta et al., 2019, Zhang et al., 2023, Tran
+et al., 2023].
+In all aforementioned applications, surrogates are domain-specific variables that still need to be
+collected by the researcher, albeit at a lower cost than the outcome of interest. The incurred cost and
+time required for surrogate measurement are not always negligible. Note also that the surrogates may
+themselves be missing due to survey non-response, attrition, or unexpected failure of the measurement
+system. This would lead to a violation of surrogacy assumptions [Prentice, 1989, Frangakis and Rubin,
+2002, Lauritzen et al., 2004, Chen et al., 2007, VanderWeele, 2013], even if the outcome of interest is
+missing at random.
+1.1
+Predictions as Surrogates in the Age of AI
+With the rise of machine learning and AI, a nascent literature on prediction-powered inference (PPI) in-
+troduces predictions by pre-trained models as another class of surrogates [Angelopoulos et al., 2023a,b,
+Wang et al., 2020, Zrnic and Cand`es, 2024b,a, Fisch et al., 2024, Xu et al., 2025]. For example, a
+large language model (LLM) can quickly generate text annotations, such as tones and sentiments,
+which can serve as surrogates for “gold-standard” human annotations [Egami et al., 2024, Gligori´c
+et al., 2024]. Despite the similarity to the earlier uses of surrogates, prediction surrogates present an
+important conceptual departure from the surrogate framework. For example, the cost of generating
+a prediction, even from large-scale commercial AI models, is often orders of magnitude smaller than
+measuring a domain-specific surrogate variable. In addition, prediction surrogates are never missing:
+the prediction is fully decided by the covariates or contextual information associated with each unit
+(up to algorithmic randomness that can be controlled by the researcher; e.g., random seeds).
+This last point raises an important question. Strictly speaking, unlike domain-specific surrogates,
+predictions carry no additional information since they are solely a function of the observables. What
+is then the value of using pre-trained models? The answer is: they accelerate learning. In settings
+where covariates are low-dimensional and tabular, the researcher can learn the relationship between
+the outcome of interest and the covariates precisely simply using the data at hand, without resorting
+to external prediction models, provided that the data is of a decent size. However, this strategy may
+be ineffective or even infeasible in modern scientific applications. Indeed, given the vast computational
+resources and large amounts of high-dimensional and unstructured data that go into their training,
+pre-trained models can “pick up” complex patterns that can significantly accelerate learning the re-
+lationship between outcomes and covariates. This makes pre-trained models often more reliable than
+“hand-cooked” domain-specific models.
+For example, election forecasting models rely on multimodal data such as polls, prediction mar-
+kets, past election results, and economic indicators [e.g. Hummel and Rothschild, 2014, Donnini et al.,
+2024].
+The researcher does not have access to all data used to train such models but can query
+the models for any demographic group of interest through the API. The performance gap between a
+2
+
+===== PAGE 3 =====
+hand-cooked model and a pre-trained model is even more pronounced in the age of AI, when no single
+researcher or lab has sufficient resources to train a generative model from scratch that is competitive
+with commercial models. Furthermore, for unstructured covariates such as images and texts, fitting
+good models of the outcome of interest is increasingly challenging for most researchers. With massive
+training data, pre-trained AI models can learn from a wide variety of contexts, capturing nuances,
+relationships, and patterns that smaller datasets might not cover. This diversity leads to more general-
+izable representations, and hence more reliable predictions. Empirical evidence supports this, even in
+areas where general-purpose AI models might not be expected to excel. For example, Vafa et al. [2022]
+build a foundation model for job sequences, by treating each occupation as a word, using millions of
+passively-collected resumes from labor market participants. Yet, Du et al. [2024] later show that the
+model underperforms off-the-shelf LLMs with careful fine-tuning.
+For all these reasons, pre-trained machine learning and AI models carry substantive value, as the
+relationship between outcomes and covariates is often difficult to learn solely from the available data.
+This contrasts with the perspective of semiparametric statistics, which assumes a low-dimensional
+setting where all conditional distributions can be learned accurately without relying on external data.
+1.2
+Recalibrated PPI: A Lesson from Surrogate Outcomes
+Although predictions are natural surrogates, the formal connection between PPI and the literature
+on surrogate outcome models is still an active area of investigation. Existing literature Gronsbell
+et al. [2024], Miao et al. [2025], Xu et al. [2025] has explored using methods from surrogate outcome
+models to improve PPI, however a practical computational strategy to achieve efficiency is not yet
+established. Our first contribution is to explain the two frameworks in a unified language, clarifying
+the connections and distinctions. Drawing on results from the surrogate outcomes literature [Robins
+et al., 1994, Chen and Chen, 2000, Chen et al., 2003, 2005, 2008b, Tang and Qin, 2012], we identify
+inefficiencies in existing PPI proposals [Angelopoulos et al., 2023a,b, Gronsbell et al., 2024].
+Building off the established connections, we then introduce a more efficient method, termed recal-
+ibrated PPI, or RePPI for short. The method is applicable for estimands defined through estimating
+equations. When the estimating equation is given by a generalized linear model (GLM), the procedure
+essentially applies PPI with “recalibrated” predictions, obtained by approximating the conditional ex-
+pectation of the true outcome given the predicted outcome and the covariates that define the estimand.
+For general estimating equations, the method applies the same recalibration to the “imputed loss” [An-
+gelopoulos et al., 2023a]. The recalibration can be regarded as model fine-tuning. Recalibrated PPI is
+always more efficient than inference that does not utilize predictions as surrogates, even when the con-
+ditional expectation of the true outcome is estimated inconsistently. If the conditional expectation is
+estimated consistently, the method achieves the minimum asymptotic variance among all “prediction-
+powered estimators,” defined in Section 2.2. While the core idea is inspired by existing literature
+[Robins et al., 1994, Chen and Chen, 2000], we differ from the previous proposals in two key aspects:
+(1) our method applies cross-fitting to enable flexible recalibration of the imputed loss via machine
+learning algorithms [Chernozhukov et al., 2018]; (2) we use a linearized empirical risk minimization
+approach to simplify the computation.
+We elaborate on our methodological novelty in Section 2.3.
+Recognizing that even the best general-purpose model can generate biased predictions, another
+main contribution of this paper is to study the role of recalibration in the context of common use-
+cases for pre-trained models. We provide theoretical insights into the benefits of recalibration in three
+common scenarios:
+• Modality mismatch. The predictions may be based on only a subset of the available covariates.
+For example, for each individual in the dataset we may have both demographic information and
+a medical scan (e.g., MRI). We may use a computer vision model to predict the individual’s
+diagnosis based on the medical scan, but there is no way to input the demographic information
+3
+
+===== PAGE 4 =====
+into the prediction. In such cases, recalibration can improve efficiency by fine-tuning the generic
+predictions for each demographic group.
+• Distribution shift. The prediction model may have been trained on a general-purpose dataset
+following a different distribution than the population under study. For example, most LLMs are
+trained on texts from the whole internet and may not be well-calibrated to specific subgroups.
+Recalibration improves efficiency by adjusting the predictions to better reflect the outcome in
+the population of interest.
+• Discrete predictions. Discrete predictions, commonly used for binary or categorical outcomes,
+may not be sufficiently informative. Moreover, while there are sometimes ways of obtaining a
+probabilistic output (e.g., by prompting an LLM to produce probabilistic predictions, or by
+looking at its token probabilities), these are widely acknowledged to be miscalibrated and un-
+reliable [Xiong et al., 2023, Wei et al., 2024]. Recalibration improves efficiency by turning the
+discrete predictions into calibrated numerical ones. We note that Hofer et al. [2024] similarly
+acknowledge a need for recalibrating discrete predictions in the PPI context.
+2
+A Review of the Surrogate Outcome Model and PPI
+2.1
+Surrogate Outcome Model
+The surrogate outcome model addresses the standard problem of inferring the relationship between
+an outcome variable Y and covariates X. The parameter of interest θ⋆∈Rd is defined as the solution
+to an estimating equation:
+E[Uθ(X, Y )] = 0,
+(1)
+for some function Uθ. For example, Uθ(X, Y ) can be chosen to be a score function, i.e., the gradient
+of a log-likelihood.
+When data collection is costly or time-consuming, it may be impossible to measure the true outcome
+for all subjects. In the hope of increasing the sample size, researchers often collect a surrogate outcome
+ˆY that is correlated with the outcome of interest Y and can be measured at a much lower cost. We
+assume that we observe n labeled observations, for which Y is available, and N unlabeled observations,
+for which only (X, ˆY ) is available. Equivalently, if D ∈{0, 1} denotes the indicator of having a label,
+D = 1 meaning that Y is observed, then we have an incomplete dataset {(Yi, ˆYi, Xi, Di)}n+N
+i=1 .
+Unless Y and ˆY are perfectly correlated, replacing Y by ˆY does not yield a valid estimating
+equation, i.e., E[Uθ⋆(X, ˆY )] ̸= 0. Pepe [1992] provides an early semiparametric solution to correct for
+this bias; here we take the perspective of Robins et al. [1994], who consider a similar semiparametric
+model. We note that, although they focus on missing covariates rather than missing outcomes, their
+theory directly applies to the latter. They assume that the missingness occurs at random, i.e., P(D =
+1|Y, ˆY , X) = p for some p ∈(0, 1). Their proposed estimator ˆθ is defined as the solution to the modified
+estimating equation
+n+N
+X
+i=1
+Di
+p Uθ(Xi, Yi) −Di −p
+p
+sθ(Xi, ˆYi)
+
+= 0,
+(2)
+where sθ is a user-specified function. Throughout the paper, we will call sθ the imputed score function
+or simply score function, as it usually appears in the form of the gradient of a likelihood function in
+most applications discussed in the paper, but it can be more general in principle. They prove that the
+optimal choice is given by
+s⋆
+θ(X, ˆY ) = E[Uθ(X, Y ) | X, ˆY ].
+(3)
+4
+
+===== PAGE 5 =====
+The resulting estimator ˆθ with this choice of sθ is semiparametrically efficient. The authors suggest
+estimating the optimal s⋆
+θ parametrically.
+Equation (2) is an augmented inverse probability weighted (AIPW) estimating equation for a
+missing-outcome problem [Robins et al., 1994, Tsiatis, 2006].
+The first term,
+Di
+p Uθ(Xi, Yi), is the
+inverse-probability weighted complete-data estimating function, while the second term, −Di−p
+p
+sθ(Xi, ˆYi),
+is a mean-zero augmentation based on the surrogate information (Xi, ˆYi). Equivalently, the estimating
+equation can be written as
+n+N
+X
+i=1
+Di
+p {Uθ(Xi, Yi) −sθ(Xi, ˆYi)} + sθ(Xi, ˆYi)
+
+= 0.
+(4)
+This is the usual AIPW decomposition in causal inference: the labeled observations (Di = 1) estimate
+the residual Uθ(X, Y ) −sθ(X, ˆY ), while all observations contribute the surrogate-based augmentation
+sθ(X, ˆY ). In our setting the observation probability p is known and constant, so the main issue is not
+the estimation of p but the choice of the augmentation sθ.
+Recognizing the practical challenge of choosing a well-specified parametric model for fitting s⋆
+θ,
+Chen and Chen [2000] improve the surrogate outcome estimator with a safeguard against poorly
+specified sθ. They condition on the missingness, i.e., they assume access to a dataset with observed
+outcomes {(Yi, ˆYi, Xi)}n
+i=1 and a dataset with missing outcomes {( ˆYi, Xi)}n+N
+i=n+1 independently. For
+Uθ(X, Y ) ∈Rd, they propose the following “safe” estimator, which we will refer as the “CC-estimator”
+for short:
+ˆθCC ≜ˆθXY−only −ˆ
+Ms(ˆθXY−only
+s
+−ˆθAll
+s ).
+(5)
+Here, ˆθXY−only, ˆθXY−only
+s
+, and ˆθAll
+s
+respectively solve the following estimating equations:
+1
+n
+n
+X
+i=1
+Uθ(Xi, Yi) = 0,
+1
+n
+n
+X
+i=1
+sθ(Xi, ˆYi) = 0,
+1
+n + N
+n+N
+X
+i=1
+sθ(Xi, ˆYi) = 0,
+and the matrix ˆ
+Ms is an empirical estimate of
+E[∇UˆθXY−only]−1Cov(UˆθXY−only, sˆθXY−only)Cov(sˆθXY−only)−1E[∇sˆθXY−only]−1
+based on the labeled data. The matrix ˆ
+Ms can be viewed as a tuning parameter that decides how
+much to rely on the predictions ˆYi; if it equals zero, then ˆθCC reduces to the “XY-only” estimator
+ˆθXY−only that ignores the predictions. The specific choice of ˆ
+Ms above optimizes estimator efficiency,
+and thus the CC-estimator is never worse by incorporating predictions, no matter the choice of sθ.
+If, however, we happen to be able to learn and use the optimal score (3), then the estimator is
+semiparametrically efficient.
+Inspired by the above works, we develop a method for the context of prediction-powered inference
+that is both efficient when the optimal score function is estimated consistently, and safe against bad
+predictions regardless of how well the score function is chosen.
+2.2
+Connection to Prediction-Powered Inference
+Prediction-powered inference (PPI) was proposed by Angelopoulos et al. [2023a] as a way to incorporate
+machine learning predictions from any black-box model into statistical inference. In their setting, the
+researcher has access to two datasets, one labeled and one unlabeled. For notational convenience, we
+split the covariates into two sets: by X we denote the covariates that define the inference problem,
+as in (1), and by W we denote possibly unstructured, high-dimensional additional covariates, such as
+5
+
+===== PAGE 6 =====
+text or images, that can be used for prediction. Thus, the researcher has access to n i.i.d. labeled
+data points, {(Yi, Xi, Wi)}n
+i=1, and N i.i.d.
+unlabeled data points, {(Xi, Wi)}n+N
+i=n+1.
+The working
+assumption in PPI is that the distribution of (Xi, Wi) is the same in the two datasets. The target
+parameter is defined as
+θ⋆= argmin
+θ∈Θ
+E[ℓθ(X, Y )],
+(6)
+for a loss ℓθ that is convex in θ ∈Rd. This target is equivalent to the estimating-equation target (1)
+if we take Uθ = ∇ℓθ.
+The researcher additionally has access to a black-box machine learning model f, which outputs
+predictions ˆY = f(X, W). The model is not required to take both X and W as inputs; often it only
+takes W, e.g. in the case of text annotation or image classification. With the assistance of the machine
+learning model, one can expand the labeled and the unlabeled datasets with predictions ˆY . Clearly,
+this recovers the same problem structure as the surrogate outcome model—the researcher has access
+to an incomplete dataset {(Yi, ˆYi, Xi, Wi, Di)}n+N
+i=1 , where Yi is observed if and only if Di = 1, and
+Di = 1 for i ∈{1, . . . , n} and Di = 0 for i ∈{n + 1, . . . , n + N}. The resemblance suggests that
+predictions can be thought of as surrogates. Throughout the paper, we will study a setting where
+n/N →r with a limit r ∈(0, 1) as n →∞to develop asymptotic theory.
+The estimators from most of the recent PPI literature [Angelopoulos et al., 2023a,b, Miao et al.,
+2025, Gan et al., 2024, Gronsbell et al., 2024, Xu et al., 2025] can be written in a unified form. We
+call the following unifying formula the PPI estimator:
+ˆθPPI
+g
+= argmin
+θ
+1
+n
+n
+X
+i=1
+ℓθ(Xi, Yi) −
+ 
+1
+n
+n
+X
+i=1
+gθ(Xi, ˆYi) −1
+N
+n+N
+X
+i=n+1
+gθ(Xi, ˆYi)
+!
+.
+(7)
+Here, gθ is a method-specific function that we call the imputed loss; the different estimators from
+the literature differ in their choice of gθ.
+If ℓθ is convex, (7) is essentially equivalent to (2) with
+sθ(X, ˆY ) = ∇gθ(X, ˆY ). Similar to (2), the PPI estimator can be viewed as optimizing the loss function
+of the AIPW form with known propensity score p =
+n
+n+N .
+We summarize below the existing choices of gθ in the PPI literature and their counterparts from
+surrogate outcomes and related literature.
+• The XY-only estimator ˆθXY−only is a special case of (7) with gθ(X, ˆY ) = 0. Recall, this is the
+estimator that ignores the predictions and simply uses the subset of the data where Y is observed.
+• The standard PPI estimator [Angelopoulos et al., 2023a,b], which we denote by ˆθPPI, chooses
+gθ = ℓθ. This estimator is very similar to the estimator from Tang and Qin [2012] with a single
+imputation and a constant propensity score p(Xi) = n/(n + N).
+• Followup works choose gθ such that ∇gθ =
+ˆ
+M∇ℓθ for some matrix
+ˆ
+M that minimizes the
+asymptotic variance of the resulting estimator within a class M . Specifically, M is chosen as
+the set of scaled identity matrices in Angelopoulos et al. [2023b], the set of diagonal matrices in
+Miao et al. [2025], and the set of all matrices in Xu et al. [2025]. For one-dimensional targets
+θ⋆, these proposals are equivalent.
+• Gan et al. [2024] consider a more general class with ∇gθ = γ ˆ
+M(θ)fθ where γ is a scalar, fθ is a
+given function that takes values in Rq, and ˆ
+M(θ) is the d×q matrix that minimizes the asymptotic
+variance of the resulting estimator. In their numerical studies, Gan et al. choose fθ = ∇ℓθ, as in
+PPI++. Their method generalizes the method of Song et al. [2024], who leverage the unlabeled
+data through simple summary statistics such as polynomials, rather than pre-trained models.
+6
+
+===== PAGE 7 =====
+All aforementioned estimators but ˆθPPI are guaranteed to be more efficient than the XY-only
+estimator ˆθXY−only. However, none of them achieves the lowest asymptotic variance among the class
+of PPI estimators defined by (7), except in a few special cases.
+Returning to Robins et al. [1994], this earlier work implies that the optimal imputed loss is given by
+∇g⋆
+θ(X, ˆY ) =
+N
+n + N E[∇ℓθ(X, Y ) | X, ˆY ].
+(8)
+In general, this optimal choice is more complex than a linear transformation applied to ∇ℓθ. Recog-
+nizing this difficulty, in this paper, we roughly choose gθ to be of the form
+∇gθ(X, ˆY ) = ˆ
+M∇ˆg⋆
+θ(X, ˆY ),
+(9)
+where ∇ˆg⋆
+θ is an estimate of the optimal ∇g⋆
+θ by Robins et al. [1994], and ˆ
+M is a d × d matrix that
+serves a similar purpose as in Angelopoulos et al. [2023b], Miao et al. [2025], Xu et al. [2025], and, as
+discussed earlier, Chen and Chen [2000]: to protect against poor estimates ∇ˆg⋆
+θ, ensuring no loss in
+efficiency compared to the XY-only baseline. We do not restrict ˆ
+M to be within a simple class.0
+Below, we provide a concrete example to show the explicit form of the PPI estimator.
+Example 1 (Mean estimation). Consider the mean estimation problem where the goal is to estimate
+θ⋆= E[Y ].
+Equivalently, we can write this estimand as an instantiation of (6) with ℓθ(X, Y ) =
+(Y −θ)2. Let m⋆(X, ˆY ) = E[Y | X, ˆY ]. Since ∇ℓθ(X, Y ) = 2θ −2Y , the optimal imputed loss (8) can
+be chosen as g⋆
+θ(X, ˆY ) =
+N
+n+N (m⋆(X, ˆY ) −θ)2. The PPI objective (7) then becomes
+1
+n
+n
+X
+i=1
+(Yi −θ)2 −
+N
+n + N
+(
+1
+n
+n
+X
+i=1
+(m⋆(Xi, ˆYi) −θ)2 −1
+N
+n+N
+X
+i=n+1
+(m⋆(Xi, ˆYi) −θ)2
+)
+.
+Therefore, the resulting estimator has a closed form ˆθPPI
+g⋆
+=
+1
+n+N
+Pn+N
+i=1 m⋆(Xi, ˆYi) + 1
+n
+Pn
+i=1{Yi −
+m⋆(Xi, ˆYi)}.
+Remark 1. We take a moment to discuss the relevance of the additional covariates W, which do not
+appear in the definition of the target (6). Technically, we could allow gθ to depend on W. Robins
+et al. [1994] again implies that the optimal ∇gθ(X, W, ˆY ) would be given by E[∇ℓθ(X, Y ) | X, W, ˆY ].
+However, this would make ˆY redundant since the prediction is simply a function of (X, W), so
+E[∇ℓθ(X, Y ) | X, W, ˆY ] = E[∇ℓθ(X, Y ) | X, W].
+An implicit assumption in existing PPI works,
+which we adopt here as well, is that W is unstructured, high-dimensional data that is difficult to access
+other than through ˆY . For example, W can be text or image data, which is difficult for modeling
+and learning from scratch since it often requires a large sample size and high computational budget to
+train state-of-the-art deep learning models. In this scenario, directly estimating E[∇ℓθ(X, Y ) | X, W]
+is extremely challenging, if not impossible. In contrast, pretrained foundation models, which acquire
+general knowledge from massive data sources, can process this task-specific information efficiently and
+produce high-quality predictions ˆY with low cost – they essentially provide an informative summary
+or featurization of W. For this reason, we focus on the class of estimators that depend on W only
+through ˆY . We leave other, more flexible uses of W for future research.
+Remark 2. In addition to the “loss-level” correction (7), a few other PPI works follow the formulation
+of Chen and Chen [2000] and explore an “estimator-level” correction:
+ˆθPPI
+g
+= ˆθlab −M(ˆθlab
+g
+−ˆθunlab
+g
+),
+(10)
+0Although the right-hand side of (9) is not necessarily the gradient of some function, we directly work with ∇gθ in
+our theory, without having to invoke gθ, so this is not an issue.
+7
+
+===== PAGE 8 =====
+where M ∈Rd×d is a tuning matrix, and
+ˆθlab = argmin
+θ
+1
+n
+n
+X
+i=1
+ℓθ(Xi, Yi), ˆθlab
+g
+= argmin
+θ
+1
+n
+n
+X
+i=1
+gθ(Xi, ˆYi), ˆθunlab
+g
+= argmin
+θ
+1
+N
+n+N
+X
+i=n+1
+gθ(Xi, ˆYi).
+Miao et al. [2024], Zrnic [2024] choose the original loss function g = ℓand a scalar matrix M = rI;
+Miao and Lu [2024], Kluger et al. [2025] choose the original loss function g = ℓand M as an estimate
+of (Var(ˆθlab
+g ) + Var(ˆθunlab
+g
+))−1Cov(ˆθlab
+g , ˆθlab); Gronsbell et al. [2024] further replace ˆθunlab
+g
+with ˆθall
+g ,
+which uses all labeled data and unlabeled data for the estimaton. In particular, Gronsbell et al. [2024]
+point out the efficient choice of g, but they still suggest using g = ℓand optimizing M among all
+matrices, admitting the practical challenge of finding the optimal g. In terms of asymptotic theory,
+the estimator-level correction (10) is similar to the loss-level correction (7), and we will focus on the
+formulation (7).
+2.3
+Methodological Contribution
+In this section, we highlight the methodological contribution of our method compared to the existing
+literatures on surrogate outcomes and prediction-powered inference.
+1. Cross-fitting: Our RePPI estimator uses cross-fitting to isolate the score learning and inference.
+Classical surrogate outcome estimators Chen and Chen [2000], Chen et al. [2008a] typically
+use low-dimensional parametric models for modeling E[Uθ(X, Y ) | X, ˆY ], which can achieve
+efficiency when the model is correctly specified, even if we use the same sample to learn the
+model and do inference. However, if one replaces the working model with a highly adaptive
+learner, such as random forests, boosted trees, or neural networks, same-sample fitting can
+introduce first-order overfitting bias. Cross-fitting makes the evaluation of recalibrated scores for
+all labeled observations out-of-sample, so that the final estimator can achieve efficiency under an
+L2-convergence condition for the learned score. Therefore, cross-fitting enables us to use highly
+flexible machine learning models to handle complex datasets, where the optimal score cannot
+be captured within a parametric model, to still achieve efficiency. We elaborate on the role of
+cross-fitting and compare it with fitting the score on the entire labeled sample in Section B.
+2. Linearized implementation: Our RePPI estimator can be implemented by optimizing the
+PPI objective (7) with a linear choice of gθ.
+This ensures the final estimation procedure is
+convex as long as the original loss function is convex, regardless of the property of the fitted
+score. This resolves the potential non-convexity issue of previous PPI estimators [Angelopoulos
+et al., 2023a,b].
+Moreover, our gθ only estimates the optimal score function at θ⋆, which is
+sufficient for asymptotic efficiency. In contrast, Chen and Chen [2000], Gronsbell et al. [2024]
+require estimating the optimal score function for all values θ, as well as strong assumptions on
+the model class to enable efficient minimization with the fitted score function. Xu et al. [2025]
+use a basis-expansion approach to learn the optimal score, and explicitly require the eigenvalues
+of the empirical covariance matrix for the basis function to be lower bounded. In Appendix
+E.3, we show that the basis-expansion approach can be numerically unstable and suffer from
+approximation error.
+To summarize, although semiparametric efficiency is widely established in the literature, our work
+provides a practical methodology to achieve this efficiency without requiring strong parametric as-
+sumptions on the optimal score or fitting the optimal score for every value of θ. This is particularly
+important in applications arising from complicated datasets with prediction surrogates generated from
+AI and machine learning models, where classical parametric models fail to capture the relationship be-
+tween true labels, covariates, and surrogates. We provide a concrete computational guide (Algorithm
+8
+
+===== PAGE 9 =====
+1) to enable the use of any flexible learner, together with theoretical guarantees on safety against poor
+predictions and efficiency under consistent estimation of the optimal score (Theorem 2), as outlined
+above.
+3
+Our Method: Recalibrated PPI
+3.1
+Optimal Imputed Loss
+Based on the connections established in Section 2.2, we know that the optimal imputed loss, i.e.,
+the one that yields the smallest asymptotic variance of ˆθPPI
+g
+, must be given by (8). For the sake of
+completeness, we state this result formally below and present a self-contained proof in Section C.1 of
+the Supplementary Material. Up to minor technical differences in the setup, the proof is almost the
+same as in Robins et al. [1994].
+Theorem 1. Let the target θ⋆defined in (6) be unique. Assume that n/N →r and the objective
+function (7) is convex. Let Hθ⋆= E[∇2ℓθ⋆(X, Y )]. Under regularity conditions (Assumption 1 in
+Section C.1 of the Supplementary Material), √n(ˆθPPI
+g
+−θ⋆) d−→N(0, ΣPPI
+g
+), where
+ΣPPI
+g
+= H−1
+θ⋆
+
+rCov(∇gθ⋆(X, ˆY )) + Cov(∇ℓθ⋆(X, Y ) −∇gθ⋆(X, ˆY ))
+
+H−1
+θ⋆.
+Furthermore, if gθ satisfies (8) at θ⋆, i.e.,
+∇gθ⋆(X, ˆY ) =
+1
+1 + rs⋆(X, ˆY ),
+where s⋆(X, ˆY ) = E[∇ℓθ⋆(X, Y ) | X, ˆY ],
+(11)
+then ΣPPI
+g
+= H−1
+θ⋆
+
+Cov(∇ℓθ⋆(X, Y )) −
+1
+1+rCov(E[∇ℓθ⋆(X, Y )|X, ˆY ])
+
+H−1
+θ⋆, and ΣPPI
+g
+⪯ΣPPI
+g′
+for any g′
+θ.
+Here, the asymptotic variance of ˆθPPI
+g
+with optimal gθ defined by (11) matches the efficiency
+bound of Xu et al. [2025] in the prediction-restricted PPI model.
+In this model, the black-box
+prediction rule f is treated as fixed, and the auxiliary information available for unlabeled observations
+is (X, ˆY ), where ˆY = f(X, W); we cannot use the full high-dimensional or unstructured covariates W
+directly. Equivalently, one observes n labeled points (Yi, ˆYi, Xi) and N unlabeled points (Xi, ˆYi), with
+both samples drawn from the same marginal distribution. Under this model, the resulting efficiency
+bound coincides with the corresponding semi-supervised bound of Xu et al. [2025] when their auxiliary
+covariate is taken to be (X, ˆY ). The efficient augmentation in the full nonparametric model in which
+W is directly available and tractable for inference would condition on (X, W) and result in a smaller
+bound.
+Theorem 1 implies that the asymptotic variance of ˆθPPI
+g
+depends on the imputed loss only through
+its gradient at θ⋆, suggesting that the optimal imputed loss is non-unique. Although any gθ satisfying
+(11) is statistically optimal, the computational efficiency of different choices may vary. For example,
+the imputed loss defined in (8) might be a complicated function of θ that results in a non-convex ob-
+jective function in (7). Moreover, computing ˆθPPI
+g
+would require estimating the conditional expectation
+E[∇ℓθ(X, Y ) | X, ˆY ] for every value of θ, which is challenging for general losses.
+A more convenient choice of the imputed loss is the linear function
+gθ(X, ˆY ) =
+1
+1 + rθ⊤s⋆(X, ˆY ).
+(12)
+With this choice, the objective function in (7) simply adds a linear shift to the standard empirical
+loss; therefore, it remains convex as long as ℓθ is convex.
+9
+
+===== PAGE 10 =====
+Example 2 (Generalized linear models). Suppose ℓθ is given by a generalized linear model (GLM):
+∇ℓθ(X, Y ) = X(µ(X⊤θ) −Y ), for some µ. Then, (11) gives
+s⋆(X, ˆY ) = X
+
+µ(X⊤θ⋆) −E[Y | X, ˆY ]
+
+= ∇ℓθ⋆(X, E[Y | X, ˆY ]).
+When predictions are calibrated in the sense that ˆY = E[Y | X], then E[Y | X, ˆY ] = ˆY , and standard
+PPI is optimal. In general, E[Y | X, ˆY ] can be viewed as a recalibrated prediction.
+Example 3 (Smooth Huber-type robust regression). Consider a smooth Huber-type robust regres-
+sion loss [Huber, 1992, Charbonnier et al., 1997], ℓθ(X, Y ) = δ2
+"
+1 +
+
+Y −X⊤θ
+δ
+21/2
+−1
+#
+. Then
+∇ℓθ(X, Y ) = −X
+Y −X⊤θ
+
+1+
+
+Y −X⊤θ
+δ
+21/2 , and (11) gives s⋆(X, ˆY ) = −X E
+
+
+Y −X⊤θ⋆
+
+1+
+
+Y −X⊤θ⋆
+δ
+21/2
+
+X, ˆY
+
+.
+Unlike in the case of GLMs, this is generally not equal to ∇ℓθ⋆(X, E[Y | X, ˆY ]), so recalibration must
+target the score rather than only the outcome.
+3.2
+Recalibrated PPI: An Efficient Implementation
+Despite the simple form of (12), gθ is challenging to approximate because (a) θ⋆is unknown, and
+(b) s⋆may be complex. Our main idea is to replace θ⋆by an initial estimator ˆθ0, such as the XY-
+only estimator ˆθXY−only, and s⋆by ˆs, an estimate of E[∇ℓˆθ0(X, Y ) | X, ˆY ] produced via a flexible
+machine learning method. For example, we can apply random forests or gradient boosting, treating
+(∇ℓˆθ0(Xi, Yi))n
+i=1 as the outcomes and (Xi, ˆYi)n
+i=1 as the covariates.
+When ˆs consistently estimates s⋆, we can show that the resulting estimator ˆθPPI
+g
+is asymptotically
+equivalent to the estimator given by the optimal imputed loss (12).
+However, if the estimate is
+asymptotically biased—for example, due to the computational complexity of approximating s⋆—the
+asymptotic variance of the resulting estimator would be inflated and could even be worse than the
+variance of the XY-only estimator. To guarantee an efficiency gain over the XY-only estimator, we
+apply the idea of optimal control variates [Chen and Chen, 2000, Gan et al., 2024, Gronsbell et al.,
+2024] or power tuning [Angelopoulos et al., 2023b, Miao et al., 2025]. Specifically, we pre-multiply
+ˆs(X, ˆY ) with a matrix ˆ
+M that captures the correlation between the true gradient ∇ℓθ⋆(X, Y ) and the
+estimated score ˆs(X, ˆY ), and we minimize the asymptotic variance of the resulting PPI estimator over
+ˆ
+M. Again, to operationalize the approach, we replace θ⋆by an initial estimator ˆθ0 and set
+ˆ
+M = d
+Cov(∇ℓˆθ0(X, Y ), ˆs(X, ˆY ))d
+Cov(ˆs(X, ˆY ))−1,
+(13)
+where d
+Cov denotes the sample covariance matrix. This choice of ˆ
+M, as we shall soon see, will guarantee
+an improvement upon the XY-only estimator.
+To mitigate the dependencies in these nested estimation steps, we apply a three-fold cross-fitting
+procedure. The complete recalibrated PPI procedure is given in Algorithm 1. We justify the procedure
+theoretically in the following theorem.
+Theorem 2. Let the target θ⋆defined in (6) be unique and assume n/N →r. Let Hθ⋆= E[∇2ℓθ⋆(X, Y )].
+If E[∥ˆs(X, ˆY )−s(X, ˆY )∥2] →0 holds for some s, then under regularity conditions (Assumptions 1 and
+2 in Section C.1 of the Supplementary Material), √n(ˆθCrossFit −θ⋆) d−→N(0, ΣRePPI
+s
+), where
+ΣRePPI
+s
+= H−1
+θ⋆
+
+Cov(∇ℓθ⋆(X, Y )) −∆
+
+H−1
+θ⋆
+(14)
+and ∆=
+1
+1 + rCov(∇ℓθ⋆(X, Y ), s(X, ˆY ))Cov(s(X, ˆY ))−1Cov(s(X, ˆY ), ∇ℓθ⋆(X, Y )).
+10
+
+===== PAGE 11 =====
+Algorithm 1: Recalibrated Prediction-Powered Inference (RePPI)
+Step 1: Randomly split the labeled dataset into three folds D1, D2, and D3 evenly.
+Step 2: On D3, compute the initial estimator ˆθ1
+0 = argminθ
+1
+|D3|
+P
+i∈D3 ℓθ(Xi, Yi)
+Step 3: On D2, use flexible method to estimate ˆs(X, ˆY ) ≈E[∇ℓˆθ1
+0(X, Y ) | X, ˆY ]
+Step 4: On D1, compute ˆ
+M as in (13)
+Step 5: On D1 and the unlabeled data, compute ˆθPPI
+ˆg
+with ˆgθ(X, ˆY ) =
+1
+1+n/N θ⊤ˆ
+Mˆs(X, ˆY );
+denote the obtained estimate by ˆθ1
+Step 6: Repeat Steps 2–5 with fold rotations: (D1, D3, D2) and (D2, D1, D3); obtain
+estimates ˆθ2 and ˆθ3
+Step 7: Compute the final estimate: ˆθCrossFit = |D1|
+n ˆθ1 + |D2|
+n ˆθ2 + |D3|
+n ˆθ3
+Remark 3. In Theorem 2, we require the L2 consistency of fitted score E[∥ˆs(X, ˆY ) −s(X, ˆY )∥2] →0
+to a fixed target s. In practice, for each round k ∈[1, 2, 3] in the fold rotation in Algorithm 1, the
+score fitting step would have a different target E[∇ℓˆθk
+0 (X, Y )|X, ˆY ], where ˆθk
+0 is the initial estimator at
+this round. Denote sk(X, ˆY ) as the fitted score in round k, the L2 consistency assumption is satisfied
+as long as we have E[∥ˆsk(X, ˆY ) −sˆθk
+0 (X, ˆY )∥2] →0 and E[∥sˆθk
+0 (X, ˆY ) −sθ⋆(X, ˆY )∥2] →0 for a fold
+specific limit sˆθk
+0 and a global limit sθ⋆. The first requirement E[∥ˆsk(X, ˆY ) −sˆθk
+0 (X, ˆY )∥2] →0 is the
+fixed target consistency of score learning, and the second requirement E[∥sˆθk
+0 (X, ˆY )−sθ⋆(X, ˆY )∥2] →0
+can be achieved through the continuity for the class of function sθ on parameter θ. We impose the
+assumption E[∥ˆs(X, ˆY ) −s(X, ˆY )∥2] →0 in the statement of Theorem 2 for simplicity.
+Theorem 2 demonstrates two key properties of recalibrated PPI. First, if the optimal imputed
+loss is consistently estimated, meaning s(X, ˆY ) = s⋆(X, ˆY ) = E[∇ℓθ⋆(X, Y )|X, ˆY ], then
+ΣRePPI
+s
+= H−1
+θ⋆
+
+Cov(∇ℓθ⋆(X, Y )) −
+1
+1 + rCov(E[∇ℓθ⋆(X, Y )|X, ˆY ])
+
+H−1
+θ⋆,
+(15)
+matching the efficiency of the optimal PPI estimator from Theorem 1. The second key property is
+that, even if the optimal imputed loss is inconsistently estimated, i.e. s(X, ˆY ) ̸= s⋆(X, ˆY ), recalibrated
+PPI remains more efficient than the XY-only approach.
+Notably, in the extreme case where the prediction model is perfect, i.e., Y = ˆY , then the un-
+labeled data (X, ˆY ) effectively provides extra labeled data of size N. In this scenario, the imputed
+loss s⋆(X, ˆY ) = ∇ℓθ(X, ˆY ) satisfies the optimality condition (8), and the RePPI estimator is equiv-
+alent to the empirical risk minimization over n + N samples. As a result, the asymptotic variance
+of the RePPI estimator (14) becomes
+n
+n+N H−1
+θ⋆Cov(∇ℓθ⋆(X, Y ))H−1
+θ⋆, which equals to the asymptotic
+variance of the XY-only estimator with sample size n + N. Another notable scenario is when the
+prediction is solely based on the covariates X, i.e., ˆY = f(X) for some function f. Then the op-
+timal imputed loss is s⋆(X, ˆY ) = E[∇ℓθ⋆(X, Y )|X, ˆY ] = E[∇ℓθ⋆(X, Y )|X], which implies that the
+prediction cannot help with inference. This is because ˆY is simply a measurable function of features
+X, it brings no extra information and it suffices to only use X for recalibration. However, in this
+case, the RePPI estimator can still improve the asymptotic variance upon the XY-only estimator by
+1
+1+rH−1
+θ⋆Cov(E[∇ℓθ⋆(X, Y )|X])H−1
+θ⋆, due to the recalibration of the score function using covariates X.
+Remark 4. The equal three-way split in Algorithm 1 is not essential for the validity of the method;
+it is used only as a simple and symmetric implementation. The proof of Theorem 2 only requires that
+each fold has a non-vanishing asymptotic fraction of the labeled sample, i.e.,
+|Dk|/n →πk ∈(0, 1),
+k = 1, 2, 3,
+11
+
+===== PAGE 12 =====
+and that the fold-specific estimators are combined with weights |Dk|/n, as in Algorithm 1. In practice,
+the score fitting may require more samples than other steps when a complicated model is used. In this
+scenario, it is more reasonable to evenly split the data into K folds (K ≥3), use more than one fold to
+estimate the score in Step 3 (and potentially Step 2, 4, 5), rotate the folds as in Step 6, and aggregate
+the estimates as in Step 7. It is straightforward to prove the same asymptotic theory for this splitting
+scheme, as long as the sample size of each fold is proportional to the total sample size.
+Remark 5. For the cross-fitting scheme in Algorithm 1, it is important to isolate the initial estimation,
+score fitting, and inference on different folds.
+The primary reason is to make them independent,
+so that in each step, one can treat quantities from the other steps as fixed.
+For example, if the
+initial estimation and score fitting are on the same fold, then we cannot treat the initial estimator as
+independent, and one may need to impose a uniform convergence assumption on the algorithm, such
+as supθ:∥θ−θ⋆∥≤δ E[∥ˆsθ −sθ∥] →0, which is much stronger than the assumption discussed in Remark 3
+and hard to satisfy for many flexible models. Moreover, if the score fitting and the inference step are
+merged on the same fold, then the distribution of the fitted score on the labeled data and the unlabeled
+data can be substantially different due to overfitting. However, the estimation of
+ˆ
+M can be merged
+with the inference fold, because the final estimator depends on the ˆ
+M in a simple algebraic form, and it
+is straightforward to control the estimation error of ˆ
+M directly. Therefore, we don’t split out another
+fold specifically for ˆ
+M to improve the estimation accuracy on other tasks.
+Theorem 2 immediately yields a plug-in construction of confidence intervals. After computing the
+cross-fitted RePPI estimator ˆθCrossFit, let ˜si = ˆs(−k)(Xi, ˆYi) denote the out-of-fold fitted score for each
+labeled observation i ∈Dk, and set ˆr = n/N. Define the empirical covariance matrices on the labeled
+sample as bVℓ= d
+Cov{∇ℓˆθCrossFit(Xi, Yi)}, bVs = d
+Cov{˜si}, and bCℓs = d
+Cov{∇ℓˆθCrossFit(Xi, Yi), ˜si}. We then
+estimate the asymptotic covariance in Theorem 2 by
+bΣRePPI = bH−1
+
+bVℓ−
+N
+n + N
+bCℓs bV −1
+s
+bC⊤
+ℓs
+
+bH−1,
+bH = 1
+n
+n
+X
+i=1
+∇2ℓˆθCrossFit(Xi, Yi).
+If bVs is nearly singular, we replace bV −1
+s
+by a ridge-regularized inverse (bVs + λI)−1 with a small λ ≥0.
+For the jth coordinate of θ⋆, an asymptotic 1 −α confidence interval is ˆθCrossFit
+j
+± z1−α/2
+q
+bΣRePPI,jj
+n
+.
+4
+Why is Recalibration Important?
+Stylized model analysis and
+applications
+We showed that recalibrated PPI achieves the lowest asymptotic variance among all PPI estimators (7)
+when s⋆is consistently estimated. This raises a natural question: under what conditions, and to what
+extent, does the recalibration step that estimates s⋆provide a benefit? In this section, we quantify
+the efficiency gains through three case studies, each representing a typical scenario where machine
+learning predictions systematically differ from the outcome of interest. For each case, we compare our
+method against the XY-only, PPI, and PPI++ estimators, described in Section 2.2 under our unified
+framework. We denote by ΣXY−only, ΣPPI, ΣPPI++, ΣRePPI the respective asymptotic covariance matrices.
+For each scenario, we provide an application on a real-world dataset with predictions from pre-
+trained AI models to demonstrate the importance of recalibration. In each application, we have a
+fully labeled dataset, which we randomly split into a labeled portion and an unlabeled portion. For
+the purpose of evaluating coverage, we take the value of the estimand on the full labeled dataset as a
+proxy for θ⋆. We estimate the average width of 95% confidence intervals and coverage over 100 trials.
+All code is available at https://github.com/Wenlong2000/RePPI/.
+12
+
+===== PAGE 13 =====
+4.1
+Modality Mismatch
+In modern applications, researchers can easily access data from various modalities beyond tabular data,
+including audios, images, and texts. Seeing that such data is often complex and high-dimensional, it
+is usually not involved in the definition of the target parameter. Nonetheless, the age of AI produces
+a plethora of prediction models that can turn unstructured data into numerical representations or
+predictions. In this scenario, ˆY takes as input the unstructured data W and leaves the inferentially
+relevant covariates X on the table. We call this scenario modality mismatch.
+4.1.1
+Stylized Model
+To study the efficiency gain quantitatively, we consider a stylized setting where Y is generated as
+Y = W ⊤γ + X⊤θ + ϵ, where X ∼N(0, ΣX), W ∼N(0, ΣW ), and ϵ ∼N(0, σ2) are independent
+Gaussian variables. The predictions ˆY are generated from a misspecified linear model, by regressing
+Y on W solely. The target θ⋆is given by the squared loss ℓθ(X, Y ) = (Y −X⊤θ)2, i.e. θ⋆is the
+best linear approximation of Y from X. The independence assumption implies that θ⋆= θ and the
+predictions converge to W ⊤γ. For simplicity, we ignore the sampling uncertainty of the prediction
+model and assume ˆY = W ⊤γ. We derive the asymptotic variances of the baselines in the following
+proposition. We denote by ΣXY−only, ΣPPI, ΣPPI++, ΣRePPI the respective asymptotic covariance matrices.
+Proposition 1. Assume that n/N →r. Then, in the setting described above,
+Tr(ΣXY−only) =
+
+σ2 + γ⊤ΣW γ
+
+Tr(Σ−1
+X ),
+Tr(ΣPPI) =(σ2 + (1 + r)θ⊤ΣXθ + rγ⊤ΣW γ)Tr(Σ−1
+X ) + (1 + r)∥θ∥2,
+Tr(ΣPPI++) =
+
+σ2 +
+
+
+r
+1 + r +
+1
+1 + r
+1
+1 +
+γ⊤ΣW γ
+∥θ∥2/Tr(Σ−1
+X )+θ⊤ΣXθ
+
+γ⊤ΣW γ
+
+Tr(Σ−1
+X ),
+Tr(ΣRePPI) =
+
+σ2 +
+r
+1 + rγ⊤ΣW γ
+
+Tr(Σ−1
+X ).
+In particular, Tr(ΣRePPI) ≤Tr(ΣPPI++) ≤min{Tr(ΣXY−only), Tr(ΣPPI)}.
+Comparing Tr(ΣXY−only) with Tr(ΣPPI), we can see that PPI can be worse than the XY-only
+estimator when ∥θ∥is large. Comparing Tr(ΣXY−only), Tr(ΣPPI++), and Tr(ΣRePPI), we observe that
+the contribution of the predictions is to reduce the variance caused by W. The maximal reduction
+is 1/(1 + r)Var(W ⊤γ), achieved by RePPI. The reduction of PPI++ ranges from 0 to the maximal
+amount, depending on the relative contribution of X and W in the model of Y . When θ = 0, PPI++
+is as efficient as RePPI; when ∥θ∥→∞, PPI++ approaches the XY-only estimator. The efficiency
+gain of RePPI compared to PPI++ is given by
+1
+1+r
+
+1
+γ⊤ΣW γ +
+1
+∥θ∥2/Tr(Σ−1
+X )+θ⊤ΣXθ
+−1
+· Tr(Σ−1
+X ). Thus,
+RePPI gains substantially over PPI++ when both W and X are informative.
+4.1.2
+Application to X-ray image diagnosis
+We next consider a medical-imaging application to demonstrate the gain of RePPI in a modality-
+mismatch setting. We use the NIH ChestX-ray14 dataset [Wang et al., 2017]. The outcome is whether
+a patient has pleural effusion. The target parameter is the coefficient of standardized age in a logistic
+regression of the effusion label on age, sex, and X-ray view position.
+The surrogate prediction is
+produced by a DenseNet-121 chest X-ray classifier pretrained on CheXpert [Irvin et al., 2019] and
+implemented through TorchXRayVision [Cohen et al., 2022]. Importantly, this model only takes the
+13
+
+===== PAGE 14 =====
+0.00
+0.25
+0.50
+0.75
+logistic coefficient of age
+0.10
+0.15
+0.20
+0.25
+0.30
+labeled ratio
+0.181
+0.209
+0.241
+0.278
+0.321
+interval width
+0.10
+0.15
+0.20
+0.25
+0.30
+labeled ratio
+0.6
+0.7
+0.8
+0.9
+1.0
+coverage
+XY-only
+PPI
+PPI++
+RePPI
+Figure 1:
+NIH ChestX-ray14 experiment.
+The left panel shows a representative 95% confidence
+interval, the middle panel shows average interval width, and the right panel shows empirical coverage.
+The horizontal axis represents the ratio of labeled data,
+n
+N+n. We omit the interval length curve for
+PPI because it is significantly wider than the other methods.
+Table 1:
+Required number of labeled observations to achieve a given interval length in the NIH
+ChestX-ray14 modality-mismatch experiment. The last column reports the label reduction of RePPI
+relative to PPI++. Here “NA” means that the target interval length is not reached within the labeled-
+sample-size range considered.
+Interval length
+XY-only
+PPI
+PPI++
+RePPI
+Reduced samples (%)
+0.20
+7704
+NA
+7602
+7164
+5.74%
+0.22
+6285
+NA
+6178
+5934
+3.93%
+0.24
+5374
+NA
+5273
+4963
+5.86%
+0.26
+3955
+NA
+4493
+4315
+3.95%
+radiograph as input. It does not use the structured covariates that define the inferential target. This
+creates a concrete modality mismatch: the image model provides useful diagnostic information, but
+its prediction is not directly calibrated for age-adjusted inference.
+We restrict the analysis to adult patients with frontal-view scans and use one image per patient.
+After preprocessing, the dataset contains 29,366 observations. We randomly split the data into labeled
+and unlabeled portions, and vary the labeled fraction from 10% to 30%, and compare XY-only, PPI,
+PPI++, and RePPI. We use a logistic regression model to fit the recalibration score in RePPI. The
+full-data estimate is used as a proxy for the target parameter when evaluating coverage. The experi-
+mental results are reported in Figure 1 and Table 1. Standard PPI performs poorly because the raw
+image-only prediction is not on the right scale for the downstream regression target. PPI++ slightly
+improves upon the XY-only estimator through optimal power tuning, while RePPI further improves
+efficiency by recalibrating the image-based surrogate using the structured covariates. Across the la-
+beled fractions considered, RePPI yields the shortest intervals and reduces the sample size requirement
+by approximately 5% over PPI++ to reach a targeted confidence interval length.
+4.2
+Distribution Shift
+Pre-trained models like LLMs are often trained on general-purpose data that come from generic
+sources. However, researchers may target only a specific subpopulation relevant to their study. This
+distinction between the target subpopulation and the population used for model training surfaces as
+distribution shift, leading to inaccurate predictions.
+14
+
+===== PAGE 15 =====
+4.2.1
+Stylized Model
+To study the effect of distribution shift, we consider the same setting as in Section 4.1, except that
+the prediction model takes both X and W as inputs. Again we consider a linear prediction model
+ˆY = X⊤˜θ + W ⊤˜γ, but its coefficients are misspecified:
+Proposition 2. Assume that n/N →r. Then, in the setting described above,
+Tr(ΣXY−only) =
+
+σ2 + γ⊤ΣW γ
+
+Tr(Σ−1
+X ),
+Tr(ΣPPI) =(1 + r)∥θ −˜θ∥2 +
+
+σ2 + (1 + r)(θ −˜θ)⊤ΣX(θ −˜θ) + r˜γ⊤ΣW ˜γ
++ (γ −˜γ)⊤ΣW (γ −˜γ)
+
+Tr(Σ−1
+X ),
+Tr(ΣPPI++) =
+
+
+σ2 + γ⊤ΣW γ −
+1
+1 + r
+(γ⊤ΣW ˜γ)2
+˜γ⊤ΣW ˜γ + (θ −˜θ)⊤ΣX(θ −˜θ) + ∥θ−˜θ∥2
+Tr(Σ−1
+X )
+
+
+Tr(Σ−1
+X ),
+Tr(ΣRePPI) =
+
+σ2 + γ⊤ΣW γ −
+1
+1 + r
+(γ⊤ΣW ˜γ)2
+˜γ⊤ΣW ˜γ
+
+Tr(Σ−1
+X ).
+In particular, Tr(ΣRePPI) ≤Tr(ΣPPI++) ≤min{Tr(ΣXY−only), Tr(ΣPPI)}.
+Comparing ΣPPI with ΣXY−only, we can see that PPI can be worse than the XY-only estimator
+when ˜γ is very different from γ. RePPI always improves upon the XY-only estimator unless W ⊤˜γ
+is orthogonal to W ⊤γ in the sense that γ⊤ΣW ˜γ = 0. Comparing ΣPPI++ with ΣRePPI, we conclude
+that the gain of RePPI over PPI++ is increasing in the bias of ˜θ. This illustrates the importance of
+recalibration under distribution shifts.
+4.2.2
+Application to Toxicity Measurement in Online Comments
+We next consider a text-classification application to demonstrate the gain of RePPI in a distribution
+shift setting. We use the CivilComments-WILDS dataset [Borkan et al., 2019, Koh et al., 2021], which
+consists of more than 400,000 public comments from 50 English-language news sites. Each observation
+consists of an online comment, a human toxicity score, and identity annotations. The outcome is the
+human toxicity score, scaled between 0 and 1. The target parameter is the regression coefficient on
+whether the comment mentions an identity group, and we use the comment length as a confounder.
+As the prediction surrogate, we use a pretrained Distil-Bert model [Sanh et al., 2019] downloaded
+from Hugging Face1, which outputs a probability that a comment is toxic. This model is trained
+on the JIGSAW toxic comment classification challenge dataset [cjadams et al., 2017] that collects
+the comments from Wikipedia and is labeled by a human rater. Therefore, although its prediction
+is informative, it is trained to detect toxicity in a knowledge-sharing environment instead of news
+discussion. This creates a natural distribution-shift setting: the surrogate comes from a prediction
+model trained in a different environment from the population used for inference.
+We subsample 10,000 comments for the experiment.
+We randomly split the data into labeled
+and unlabeled portions, and vary the labeled fraction from 10% to 30%, and compare XY-only, PPI,
+PPI++, and RePPI. We use a random forest model to fit the recalibration score in RePPI. The full-
+data estimate is used as a proxy for the target parameter when evaluating coverage. The experimental
+results are reported in Figure 2 and Table 2. Standard PPI produces wider intervals than the XY-only
+estimator, reflecting the mis-calibration of the raw toxicity-model prediction under distribution shift.
+PPI++ improves over the XY-only estimator with the use of optimal power tuning. RePPI further
+1https://huggingface.co/citizenlab/distilbert-base-multilingual-cased-toxicity
+15
+
+===== PAGE 16 =====
+0.050
+0.075
+0.100
+0.125
+0.150
+regression coefficient of identity
+0.10
+0.15
+0.20
+0.25
+0.30
+labeled ratio
+0.031
+0.036
+0.042
+0.049
+0.058
+interval width
+0.10
+0.15
+0.20
+0.25
+0.30
+labeled ratio
+0.6
+0.7
+0.8
+0.9
+1.0
+coverage
+XY-only
+PPI
+PPI++
+RePPI
+Figure 2:
+CivilComments distribution-shift experiment. The figure is produced similarly to Figure 1.
+Table 2:
+CivilComments-WILDS experiment. The table is produced similarly to Table 1.
+Interval length
+XY-only
+PPI
+PPI++
+RePPI
+Reduced samples (%)
+0.040
+2075
+NA
+1847
+1739
+5.85%
+0.042
+1885
+NA
+1666
+1578
+5.32%
+0.044
+1723
+2638
+1521
+1433
+5.77%
+0.046
+1583
+2314
+1389
+1313
+5.53%
+improves over PPI++ by recalibrating the surrogate prediction trained on Wikipedia comments to
+the news comments population. Across the labeled fractions considered, RePPI gives the shortest
+intervals, with a roughly 5% reduction in required labels relative to PPI++ for the interval lengths
+examined.
+4.3
+Discrete Predictions
+Machine learning models often produce only coarse discrete predictions. For example, Hofer et al.
+[2024] discuss examples where LLMs used as autoraters produce discrete, uncalibrated responses. In
+such cases, substituting ˆY for Y is suboptimal, even if ˆY is monotonic in Y . Recalibration essentially
+brings the predictions back to the scale of the true outcomes.
+4.3.1
+Stylized Model
+To illustrate the efficiency gain quantitatively, we consider mean estimation, θ⋆= E[Y ], obtained by
+taking ℓθ(Y ) = (Y −θ)2/2. Consider the mixture model where Z ∼Unif({1, 2, 3}) and Y | Z ∼
+N(µZ, σ2). For simplicity, we assume the prediction equals the label of the mixture component that
+Y is generated from: ˆY = Z. We derive the asymptotic variances in the following proposition.
+Proposition 3. Assume that n/N →r. In the setting described above,
+ΣXY−only = σ2 + (µ1 −µ2)2 + (µ2 −µ3)2 + (µ3 −µ1)2
+9
+, ΣPPI = ΣXY−only + 2(1 + r)
+3
+−2(µ3 −µ1)
+3
+,
+ΣPPI++ = ΣXY−only −
+1
+1 + r
+(µ3 −µ1)2
+6
+, ΣRePPI = ΣXY−only −
+1
+1 + r
+(µ1 −µ2)2 + (µ2 −µ3)2 + (µ3 −µ1)2
+9
+.
+In particular, ΣPPI++ −ΣRePPI =
+1
+1+r
+(2µ2−µ3−µ1)2
+18
+≥0.
+From Proposition 3, we find that the improvement of RePPI over PPI++ is proportional to ((µ3 −
+µ2) −(µ2 −µ1))2, which represents the linearity of the mixture distribution. When µ3 −µ2 = µ2 −µ1
+holds, then PPI++ has sufficient calibration. Otherwise, we need a nonlinear mapping to calibrate
+the predictions.
+Therefore, the linear calibration of PPI++ is insufficient and the nonparametric
+calibration of RePPI is necessary.
+16
+
+===== PAGE 17 =====
+4.3.2
+Applications to Wine Reviews
+We next consider a wine-review application that serves as a real-data counterpart to the discrete-
+prediction setting. We use the WineEnthusiast wine review dataset2, which contains wine character-
+istics such as country, price, and region, together with a taster’s written review and an integer rating
+between 80 and 100. The target parameter is the coefficient of price in a regression of the rating on
+price, and we include the wine region as a confounder.
+As the surrogate prediction, we use OpenAI’s GPT-5.4 nano model to predict the wine rating from
+the written review. The model is prompted to output a rating from five categories: (1) very bad,
+(2) bad, (3) OK, (4) good, (5) very good. And we then use the category index 1-5 as the surrogate
+prediction. This creates a discrete-outcome setting: the surrogate predictions are coarse ordinal scores
+rather than continuous measurements. Even when the language model captures the overall sentiment
+or quality described in the review, its discrete rating may not be calibrated to the human taster’s
+scoring scale. For example, most of the reviews can be considered as good or very good, making the
+distribution of predictions heavily skewed.
+We subsample 10,000 wines from the United States for the experiment. We randomly split the
+data into labeled and unlabeled portions, and vary the labeled fraction from 10% to 30%, and compare
+XY-only, PPI, PPI++, and RePPI. We use a two-layer neural network model to fit the recalibration
+score in RePPI. The full-data estimate is used as a proxy for the target parameter when evaluating
+coverage. The results are shown in Figure 3 and Table 3. RePPI improves uniformly over the other
+methods. This is consistent with the discrete prediction mechanism studied above: a raw discrete
+prediction is informative, but it need not be on the correct calibrated scale for inference. PPI++ can
+only apply a linear correction to the raw rating, while RePPI learns a more flexible recalibration of
+the discrete surrogate. In this experiment, RePPI reduces the number of labeled examples needed to
+reach the same interval length by about 18–19% relative to PPI++.
+2
+3
+4
+regression coefficient
+0.10
+0.15
+0.20
+0.25
+0.30
+labeled ratio
+0.286
+0.336
+0.396
+0.466
+0.549
+interval width
+0.10
+0.15
+0.20
+0.25
+0.30
+labeled ratio
+0.6
+0.7
+0.8
+0.9
+1.0
+coverage
+XY-only
+PPI
+PPI++
+RePPI
+Figure 3: Wine review experiments. The figure is produced similarly to Figure 1.
+Table 3: Wine review experiment. The table is produced similarly to Table 1.
+Interval Length
+XY-only
+PPI
+PPI++
+RePPI
+Reduced Samples (%)
+0.33
+2744
+NA
+2625
+2163
+17.57%
+0.35
+2457
+NA
+2389
+1875
+21.50%
+0.37
+2151
+NA
+2110
+1725
+18.22%
+0.39
+1902
+NA
+1856
+1529
+17.61%
+2https://www.kaggle.com/datasets/mysarahmadbhat/wine-tasting
+17
+
+===== PAGE 18 =====
+5
+Conclusion
+In this paper, we establish the connection between the classical surrogate outcome model and the
+recent advancements in prediction-powered inference (PPI). From this unified perspective, we develop
+recalibrated prediction-powered inference (RePPI), a more efficient approach for leveraging machine
+learning predictions to improve statistical inference. The RePPI estimator offers both stronger theoret-
+ical guarantees in terms of asymptotic efficiency and notable computational benefits. We demonstrate
+the benefits of the RePPI estimator across various scenarios, including modality mismatch, distri-
+bution shift, and discrete predictions, through both theoretical analysis and empirical simulations.
+Additionally, we demonstrate our method on several real-world datasets, showing that it consistently
+yields tighter confidence intervals than existing PPI methods.
+This work has several limitations that suggest directions for future research.
+First, our main
+formulation uses the high-dimensional or unstructured covariates W only through the prediction ˆY =
+f(X, W), which is natural when W consists of text, images, or other difficult-to-model modalities, but
+may discard information contained in richer model outputs such as embeddings, logits, uncertainty
+scores, or multiple predictions. Second, our theoretical guarantees are asymptotic, and finite-sample
+performance depends on the quality of the learned imputed score, the labeled sample size, and the
+strength of the surrogate signal. Finally, our settings mostly focus on i.i.d. labeled and unlabeled
+samples. It would be practically important to explore how to integrate unlabeled data from different
+sources in a practical setting.
+References
+Anastasios N Angelopoulos, Stephen Bates, Clara Fannjiang, Michael I Jordan, and Tijana Zrnic.
+Prediction-powered inference. Science, 382(6671):669–674, 2023a.
+Anastasios N Angelopoulos, John C Duchi, and Tijana Zrnic. PPI++: Efficient prediction-powered
+inference. arXiv preprint arXiv:2311.01453, 2023b.
+Søren Asmussen and Peter W Glynn.
+Stochastic simulation: algorithms and analysis, volume 57.
+Springer, 2007.
+Susan Athey, Raj Chetty, Guido W Imbens, and Hyunseung Kang. The surrogate index: Combining
+short-term proxies to estimate long-term treatment effects more rapidly and precisely. Technical
+report, National Bureau of Economic Research, 2019.
+Peter J Bickel, Chris AJ Klaassen, Peter J Bickel, Ya’acov Ritov, J Klaassen, Jon A Wellner, and
+YA’Acov Ritov. Efficient and adaptive estimation for semiparametric models, volume 4. Springer,
+1993.
+Daniel Borkan, Lucas Dixon, Jeffrey Sorensen, Nithum Thain, and Lucy Vasserman. Nuanced metrics
+for measuring unintended bias with real data for text classification. In Companion Proceedings of
+The 2019 World Wide Web Conference, pages 491–500, 2019.
+Abhishek Chakrabortty and Tianxi Cai. Efficient and adaptive linear regression in semi-supervised
+settings. The Annals of Statistics, 46(4):1541–1572, 2018.
+Pierre Charbonnier, Laure Blanc-F´eraud, Gilles Aubert, and Michel Barlaud. Deterministic edge-
+preserving regularization in computed imaging. IEEE Transactions on image processing, 6(2):298–
+311, 1997.
+18
+
+===== PAGE 19 =====
+Hua Chen, Zhi Geng, and Jinzhu Jia. Criteria for surrogate end points. Journal of the Royal Statistical
+Society Series B: Statistical Methodology, 69(5):919–932, 2007.
+Song Xi Chen, Denis H Y Leung, and Jing Qin.
+Information recovery in a study with surrogate
+endpoints. Journal of the American Statistical Association, 98(464):1052–1062, 2003.
+Song Xi Chen, Denis HY Leung, and Jing Qin. Improving semiparametric estimation by using surro-
+gate data. Journal of the Royal Statistical Society Series B: Statistical Methodology, 70(4):803–823,
+2008a.
+Xiaohong Chen, Han Hong, and Elie Tamer. Measurement error models with auxiliary data. The
+Review of Economic Studies, 72(2):343–366, 2005.
+Xiaohong Chen, Han Hong, and Alessandro Tarozzi. Semiparametric efficiency in gmm models with
+auxiliary data. The Annals of Statistics, pages 808–843, 2008b.
+Yi-Hau Chen and Hung Chen.
+A unified approach to regression analysis under double-sampling
+designs. Journal of the Royal Statistical Society Series B: Statistical Methodology, 62(3):449–460,
+2000.
+Victor Chernozhukov, Denis Chetverikov, Mert Demirer, Esther Duflo, Christian Hansen, Whitney
+Newey, and James Robins. Double/debiased machine learning for treatment and structural param-
+eters, 2018.
+cjadams,
+Jeffrey Sorensen,
+Julia Elliott,
+Lucas Dixon,
+Mark McDonald,
+nithum,
+and Will
+Cukierski.
+Toxic comment classification challenge.
+https://kaggle.com/competitions/
+jigsaw-toxic-comment-classification-challenge, 2017. Kaggle.
+Joseph Paul Cohen, Joseph D. Viviano, Paul Bertin, Paul Morrison, Parsa Torabian, Matteo Guar-
+rera, Matthew P Lungren, Akshay Chaudhari, Rupert Brooks, Mohammad Hashir, and Hadrien
+Bertrand. TorchXRayVision: A library of chest X-ray datasets and models. In Medical Imaging
+with Deep Learning, 2022. URL https://github.com/mlmed/torchxrayvision.
+Denis Conniffe.
+Estimating regression equations with common explanatory variables but unequal
+numbers of observations. Journal of Econometrics, 27(2):179–196, 1985.
+Cristian Danescu-Niculescu-Mizil, Moritz Sudhof, Dan Jurafsky, Jure Leskovec, and Christopher Potts.
+A computational approach to politeness with application to social factors. In 51st Annual Meeting
+of the Association for Computational Linguistics, pages 250–259. ACL, 2013.
+Zachary Donnini, Sydney Louit, Shelby Wilcox, Mukul Ram, Patrick McCaul, Arianwyn Frank, Matt
+Rigby, Max Gowins, and Scott Tranter. Election night forecasting with ddhq: A real-time predictive
+framework. Harvard Data Science Review, 6(4), 2024.
+Tianyu Du, Ayush Kanodia, Herman Brunborg, Keyon Vafa, and Susan Athey. Labor-llm: Language-
+based occupational representations with large language models. arXiv preprint arXiv:2406.17972,
+2024.
+Naoki Egami, Musashi Hinck, Brandon Stewart, and Hanying Wei. Using imperfect surrogates for
+downstream inference: Design-based supervised learning for social science applications of large
+language models. Advances in Neural Information Processing Systems, 36:68589–68601, 2023.
+Naoki Egami, Musashi Hinck, Brandon M Stewart, and Hanying Wei. Using large language model
+annotations for the social sciences: A general framework of using predicted variables in downstream
+analyses. Preprint from November, 17:2024, 2024.
+19
+
+===== PAGE 20 =====
+Adam Fisch, Joshua Maynez, R Alex Hofer, Bhuwan Dhingra, Amir Globerson, and William W Cohen.
+Stratified prediction-powered inference for effective hybrid evaluation of language models. In The
+Thirty-eighth Annual Conference on Neural Information Processing Systems, 2024.
+Thomas R Fleming, Ross L Prentice, Margaret S Pepe, and David Glidden. Surrogate and auxiliary
+endpoints in clinical trials, with potential applications in cancer and aids research. Statistics in
+medicine, 13(9):955–968, 1994.
+Constantine E Frangakis and Donald B Rubin. Principal stratification in causal inference. Biometrics,
+58(1):21–29, 2002.
+Feng Gan, Wanfeng Liang, and Changliang Zou. Prediction de-correlated inference: A safe approach
+for post-prediction inference. Australian & New Zealand Journal of Statistics, 2024.
+Kristina Gligori´c, Tijana Zrnic, Cinoo Lee, Emmanuel J Cand`es, and Dan Jurafsky. Can unconfident
+llm annotations be used for confident conclusions? arXiv preprint arXiv:2408.15204, 2024.
+Jessica Gronsbell, Jianhui Gao, Yaqi Shi, Zachary R McCaw, and David Cheng. Another look at
+inference after prediction. arXiv preprint arXiv:2411.19908, 2024.
+Somit Gupta, Ronny Kohavi, Diane Tang, Ya Xu, Reid Andersen, Eytan Bakshy, Niall Cardin, Sumita
+Chandran, Nanyu Chen, Dominic Coey, et al. Top challenges from the first practical online controlled
+experiments summit. ACM SIGKDD Explorations Newsletter, 21(1):20–35, 2019.
+John Hammersley. Monte carlo methods. Springer Science & Business Media, 2013.
+R Alex Hofer, Joshua Maynez, Bhuwan Dhingra, Adam Fisch, Amir Globerson, and William W Cohen.
+Bayesian prediction-powered inference. arXiv preprint arXiv:2405.06034, 2024.
+Peter J Huber. Robust estimation of a location parameter. In Breakthroughs in statistics: Methodology
+and distribution, pages 492–518. Springer, 1992.
+Patrick Hummel and David Rothschild. Fundamental models for forecasting elections at the state
+level. Electoral Studies, 35:123–139, 2014.
+Jeremy Irvin, Pranav Rajpurkar, Michael Ko, Yifan Yu, Silviana Ciurea-Ilcus, Chris Chute, Henrik
+Marklund, Behzad Haghgoo, Robyn Ball, Katie Shpanskaya, et al. Chexpert: A large chest radio-
+graph dataset with uncertainty labels and expert comparison. In Proceedings of the AAAI conference
+on artificial intelligence, volume 33, pages 590–597, 2019.
+Nathan Kallus and Xiaojie Mao. On the role of surrogates in the efficient estimation of treatment
+effects with limited outcome data.
+Journal of the Royal Statistical Society Series B: Statistical
+Methodology, page qkae099, 2024.
+Robert W Keener. Theoretical statistics: Topics for a core course. Springer Science & Business Media,
+2010.
+Edward H Kennedy.
+Semiparametric doubly robust targeted double machine learning: a review.
+Handbook of statistical methods for precision medicine, pages 207–236, 2024.
+Dan M Kluger, Kerri Lu, Tijana Zrnic, Sherrie Wang, and Stephen Bates. Prediction-powered inference
+with imputed covariates and nonuniform sampling. arXiv preprint arXiv:2501.18577, 2025.
+20
+
+===== PAGE 21 =====
+Pang Wei Koh, Shiori Sagawa, Henrik Marklund, Sang Michael Xie, Marvin Zhang, Akshay Balsub-
+ramani, Weihua Hu, Michihiro Yasunaga, Richard Lanas Phillips, Irena Gao, Tony Lee, Etienne
+David, Ian Stavness, Wei Guo, Berton A. Earnshaw, Imran S. Haque, Sara Beery, Jure Leskovec,
+Anshul Kundaje, Emma Pierson, Sergey Levine, Chelsea Finn, and Percy Liang. WILDS: A bench-
+mark of in-the-wild distribution shifts. In International Conference on Machine Learning (ICML),
+2021.
+Steffen L Lauritzen, Odd O Aalen, Donald B Rubin, and Elja Arjas. Discussion on causality [with
+reply]. Scandinavian Journal of Statistics, 31(2):189–201, 2004.
+Zachary R McCaw, Jianhui Gao, Xihong Lin, and Jessica Gronsbell. Synthetic surrogates improve
+power for genome-wide association studies of partially missing phenotypes in population biobanks.
+Nature genetics, 56(7):1527–1536, 2024.
+Jiacheng Miao and Qiongshi Lu.
+Task-agnostic machine-learning-assisted inference.
+Advances in
+Neural Information Processing Systems, 37:106162–106189, 2024.
+Jiacheng Miao, Yixuan Wu, Zhongxuan Sun, Xinran Miao, Tianyuan Lu, Jiwei Zhao, and Qiongshi
+Lu. Valid inference for machine learning-assisted genome-wide association studies. Nature genetics,
+56(11):2361–2369, 2024.
+Jiacheng Miao, Xinran Miao, Yixuan Wu, Jiwei Zhao, and Qiongshi Lu. Assumption-lean and data-
+adaptive post-prediction inference. Journal of Machine Learning Research, 26(179):1–31, 2025.
+Margaret Sullivan Pepe. Inference using surrogate outcome data and a validation sample. Biometrika,
+79(2):355–365, 1992.
+Wendy J Post, Ciska Buijs, Ronald P Stolk, Elisabeth GE de Vries, and Saskia Le Cessie. The analysis
+of longitudinal quality of life measures with informative drop-out: a pattern mixture approach.
+Quality of Life Research, 19:137–148, 2010.
+Ross L Prentice. Surrogate endpoints in clinical trials: definition and operational criteria. Statistics
+in medicine, 8(4):431–440, 1989.
+Alessandra Rister Portinari Maranca, Jihoon Chung, Musashi Hinck, Adam D Wolsky, Naoki Egami,
+and Brandon M Stewart. Correcting the measurement errors of ai-assisted labeling in image analysis
+using design-based supervised learning. Sociological Methods & Research, page 00491241251333372,
+2025.
+James M Robins, Andrea Rotnitzky, and Lue Ping Zhao. Estimation of regression coefficients when
+some regressors are not always observed. Journal of the American statistical Association, 89(427):
+846–866, 1994.
+Victor Sanh, Lysandre Debut, Julien Chaumond, and Thomas Wolf. Distilbert, a distilled version of
+bert: smaller, faster, cheaper and lighter. arXiv preprint arXiv:1910.01108, 2019.
+Peter Schmidt. Estimation of seemingly unrelated regressions with unequal numbers of observations.
+Journal of Econometrics, 5(3):365–377, 1977.
+Shanshan Song, Yuanyuan Lin, and Yong Zhou. A general m-estimation theory in semi-supervised
+framework. Journal of the American Statistical Association, 119(546):1065–1075, 2024.
+Cheng Yong Tang and Yongsong Qin. An efficient empirical likelihood approach for estimating equa-
+tions with missing data. Biometrika, 99(4):1001–1007, 2012.
+21
+
+===== PAGE 22 =====
+Lorenzo Testa, Qi Xu, Jing Lei, and Kathryn Roeder. Semiparametric semi-supervised learning for
+general targets under distribution shift and decaying overlap. arXiv preprint arXiv:2505.06452,
+2025.
+Allen Tran, Aur´elien Bibaut, and Nathan Kallus. Inferring the long-term causal effects of long-term
+treatments from short-term experiments. arXiv preprint arXiv:2311.08527, 2023.
+Anastasios A Tsiatis. Semiparametric theory and missing data. Springer, 2006.
+Keyon Vafa, Emil Palikot, Tianyu Du, Ayush Kanodia, Susan Athey, and David M Blei. Career: A
+foundation model for labor sequence data. arXiv preprint arXiv:2202.08370, 2022.
+Aad W Van der Vaart. Asymptotic statistics, volume 3. Cambridge university press, 2000.
+Tyler J VanderWeele. Surrogate measures and consistent surrogates. Biometrics, 69(3):561–565, 2013.
+Siruo Wang, Tyler H McCormick, and Jeffrey T Leek. Methods for correcting inference based on
+outcomes predicted by machine learning. Proceedings of the National Academy of Sciences, 117(48):
+30266–30275, 2020.
+Xiaosong Wang, Yifan Peng, Le Lu, Zhiyong Lu, Mohammadhadi Bagheri, and Ronald M Summers.
+Chestx-ray8: Hospital-scale chest x-ray database and benchmarks on weakly-supervised classifica-
+tion and localization of common thorax diseases. In Proceedings of the IEEE conference on computer
+vision and pattern recognition, pages 2097–2106, 2017.
+Jason Wei, Nguyen Karina, Hyung Won Chung, Yunxin Joy Jiao, Spencer Papay, Amelia Glaese, John
+Schulman, and William Fedus. Measuring short-form factuality in large language models. arXiv
+preprint arXiv:2411.04368, 2024.
+Janet Wittes, Edward Lakatos, and Jeffrey Probstfield. Surrogate endpoints in clinical trials: cardio-
+vascular diseases. Statistics in medicine, 8(4):415–425, 1989.
+Miao Xiong, Zhiyuan Hu, Xinyang Lu, Yifei Li, Jie Fu, Junxian He, and Bryan Hooi.
+Can llms
+express their uncertainty? an empirical evaluation of confidence elicitation in llms. arXiv preprint
+arXiv:2306.13063, 2023.
+Zichun Xu, Daniela Witten, and Ali Shojaie. A unified framework for semiparametrically efficient
+semi-supervised learning. arXiv preprint arXiv:2502.17741, 2025.
+Shu Yang and Peng Ding. Combining multiple observational data sources to estimate causal effects.
+Journal of the American Statistical Association, 2019.
+Arnold Zellner. An efficient method of estimating seemingly unrelated regressions and tests for aggre-
+gation bias. Journal of the American statistical Association, 57(298):348–368, 1962.
+Arnold Zellner. Estimators for seemingly unrelated regression equations: Some exact finite sample
+results. Journal of the American statistical Association, 58(304):977–992, 1963.
+Anru Zhang, Lawrence D Brown, and T Tony Cai. Semi-supervised inference: General theory and
+estimation of means. The Annals of Statistics, 47(5):2538–2566, 2019.
+Vickie Zhang, Michael Zhao, Anh Le, and Nathan Kallus. Evaluating the surrogate index as a decision-
+making tool using 200 a/b tests at netflix. arXiv preprint arXiv:2311.11922, 2023.
+Tijana Zrnic. A note on the prediction-powered bootstrap. arXiv preprint arXiv:2405.18379, 2024.
+22
+
+===== PAGE 23 =====
+Tijana Zrnic and Emmanuel J Cand`es. Active statistical inference. arXiv preprint arXiv:2403.03208,
+2024a.
+Tijana Zrnic and Emmanuel J Cand`es. Cross-prediction-powered inference. Proceedings of the National
+Academy of Sciences, 121(15):e2322083121, 2024b.
+A
+Relationship with broader literature
+Besides the line of work on surrogate outcomes, prediction-powered inference has a deep connection
+with broader literature. We will briefly review these connections below.
+Post-Prediction Inference: The post-prediction inference method [Wang et al., 2020] is the first
+modern perspective on the problem of inference with prediction.
+In the same setting as the PPI
+(Section 2.2), they propose a procedure that first estimates the relationship between observed and
+predicted outcomes on a validation sample, and uses that relationship to correct downstream inference
+through bootstrap or analytical formula.
+Their method is successfully applied to many scientific
+problems, such as gene expression and the cause of death. However, their procedure may not preserve
+the statistical validity of the inference in the general settings. Thus, the PPI methods Angelopoulos
+et al. [2023a,b] are proposed as an always-valid solution.
+Control Variates. The variance-reduction mechanism in PPI is also a direct instance of the clas-
+sical control-variate principle [e.g. Hammersley, 2013, Asmussen and Glynn, 2007] from Monte-Carlo
+simulation. In its simplest form, if one wants to estimate E[U] and has access to another variable H
+with known or accurately estimable mean, then U −M{H −E(H)} has the same expectation as U,
+and the optimal linear coefficient is
+M⋆= Cov(U, H) Var(H)−1.
+(16)
+The loss function of PPI (7) applies a similar idea for M-estimation. The target here is to minimize
+the population loss function E[ℓθ(X, Y )], which can be approximated by the empirical loss function
+1
+n
+Pn
+i=1 ℓθ(Xi, Yi). For any function gθ(X, ˆY ), the additional unlabeled data allow us to estimate its
+mean much more accurately than the target loss function ℓθ(X, Y ). Therefore, gθ(X, ˆY ) can be used
+as a control variates for ℓθ(X, Y ), and the true mean E[gθ(X, ˆY )] can be replaced with the empirical
+estimate
+1
+N
+Pn+N
+i=n+1 gθ(Xi, ˆYi), which recovers the PPI loss function (7). The optimal coefficient 16 is
+exactly the same as the power tuning technique used in PPI++ [Angelopoulos et al., 2023b] and the
+correction terms in many works [Chen and Chen, 2000, Gan et al., 2024, Gronsbell et al., 2024]. We
+will also use its matrix version in our methodology.
+Semi-Parametric Inference.
+The efficient score (3) has a standard influence-function projec-
+tion interpretation.
+For the complete-data estimating equation E{Uθ(X, Y )} = 0, define Hθ =
+E[∇θUθ(X, Y )], then the complete-data influence function is
+φ(X, Y ) = −H−1
+θ⋆Uθ⋆(X, Y ).
+Since only (X, ˆY ) is observed for the unlabeled sample, the relevant projected component is
+E{φ(X, Y ) | X, ˆY } = −H−1
+θ⋆E{Uθ⋆(X, Y ) | X, ˆY }.
+Thus the optimal score s⋆(X, ˆY ) = E{Uθ⋆(X, Y ) | X, ˆY } is the score-level projection of the complete-
+data influence function onto observed information. Under the equivalent missing-label formulation
+23
+
+===== PAGE 24 =====
+with labeling probability p = n/(n + N), the efficient observed-data influence function in the semi-
+parametric inference literature [Robins et al., 1994, Tsiatis, 2006, Bickel et al., 1993, Chen et al., 2005,
+2008b, Kennedy, 2024] is given by
+φEIF(X, ˆY , Y, D) = −H−1
+θ⋆
+
+s⋆(X, ˆY ) + D
+p {Uθ⋆(X, Y ) −s⋆(X, ˆY )}
+
+.
+The efficient influence function is Neyman orthogonal to first-order perturbations of the nuisance
+function s⋆: if we define ψs(X, ˆY , Y, D) = s(X, ˆY ) + D
+p {Uθ⋆(X, Y ) −s(X, ˆY )} for any measurable
+function s, then it is straightforward to see that
+d
+dtE[ψs⋆+tq(X, ˆY , Y, D)]
+
+t=0 = E
+
+q(X, ˆY ) −D
+p q(X, ˆY )
+
+= 0
+for any measurable perturbation q. Therefore, in our RePPI estimator, we use the cross-fitting tech-
+nique [Chernozhukov et al., 2018] to enable the use of any flexible machine-learning nuisance estimators
+without introducing extra bias.
+Semi-Supervised Inference. In semi-supervised inference problems, a small labeled sample {Xi, Yi}n
+i=1
+is accompanied by a larger sample of always-observed covariates {Xi}n+N
+i=n+1. Existing methods exploit
+the unlabeled covariate distribution in different ways. For mean estimation, Zhang et al. [2019] use
+least-squares and nonparametric regression ideas to estimate the component of Y predictable from
+X, and then average this fitted component using the larger covariate sample. For linear regression,
+Chakrabortty and Cai [2018] propose an imputation-and-refitting procedure with cross-validation that
+is designed to improve efficiency while remaining adaptive to model misspecification. For general M-
+estimation, Song et al. [2024] formulate the use of unlabeled data more explicitly as a projection
+problem and derive optimal weights for combining labeled and unlabeled information. More recently,
+Testa et al. [2025] extends a semiparametric missing-at-random framework with distribution shift and
+decaying overlap. The PPI framework can be viewed as a special case of semi-supervised inference,
+where the covariates Xi are supplemented with a prediction ˆY that can be regarded as a surrogate of
+the true label Y .
+As a concurrent work, Xu et al. [2025] provides a broad semiparametric efficiency theory for semi-
+supervised inference. When the auxiliary information is taken to be (X, ˆY ), the efficient estimator of
+Xu et al. [2025] targets the same optimal imputed score as RePPI. Notably, their efficient estimator
+uses a basis expansion approach to fit the optimal score and requires the eigenvalue of the empirical
+covariance matrix of basis functions to be lower bounded, which could suffer from the curse of dimen-
+sionality and computational instability in practice (detailed empirical comparison in Appendix E.3).
+Our contribution over Xu et al. [2025] is to provide a practical computational strategy that enables
+learning the optimal imputed score with a general class of learners.
+Design-Based Supervised Learning. The PPI framework is closely related to design-based super-
+vised learning (DSL) [Egami et al., 2023, 2024, Rister Portinari Maranca et al., 2025], which studies
+downstream inference when text, image, or other AI-generated annotations are available for all units
+and gold-standard expert labels are collected for a designed subset. DSL constructs a bias-corrected
+pseudo-outcome
+eY = bs(X, ˆY ) +
+D
+π(X, ˆY )
+{Y −bs(X, ˆY )},
+where π(X, ˆY ) is the known labeling probability.
+Downstream moments are then evaluated with
+eY in place of Y . In the special case of constant labeling probability, no distribution shift, and a
+24
+
+===== PAGE 25 =====
+generalized linear model, this estimator is algebraically equivalent to the classical AIPW surrogate-
+outcome estimator (4) and therefore has the same population recalibration target as (3). However,
+the emphasis of the two approaches is different. DSL focuses on design-based validity for downstream
+social-science analyses under known, possibly stratified expert-labeling probabilities, and it guarantees
+unbiasedness and valid uncertainty quantification even when the AI annotations are arbitrarily biased.
+Our method instead focuses on achieving efficiency for general M-estimation. Its recalibration target
+(3) need not reduce to an outcome-level conditional mean for nonlinear losses. In addition, RePPI
+combines flexible cross-fitted score learning with matrix power tuning, so that imperfect recalibration
+does not lead to first-order efficiency loss relative to labeled-only inference, and its linearized imputed-
+loss formulation preserves convexity of the downstream empirical risk minimization problem.
+Seemingly Unrelated Regression.
+There is also a useful analogy between PPI and seemingly
+unrelated regression (SUR) [Zellner, 1962, 1963, Schmidt, 1977]. In SUR, several regression equations
+are estimated jointly, and generalized least squares improves efficiency when the errors across equations
+are correlated. In the context of PPI, the SUR problem can be stated as
+Y = X⊤β⋆+ ϵ,
+ˆY = X⊤γ⋆+ ϵ′,
+where ϵ and ϵ′ are correlated errors such that E[ϵ|X] = 0, E[ϵ′|X] = 0, Cov(ϵ, ϵ′|X) ̸= 0. Therefore,
+it is possible to utilize the information of ˆY to reduce the uncertainty in the estimation of β⋆. For
+example, the estimator from Conniffe [1985] can be written as
+ˆβSUR = ˆβlab −ˆ
+M(ˆγlab −ˆγall),
+where ˆβlab is the OLS coefficient of Y on X using labeled data, ˆγlab is the OLS coefficient of ˆY on
+X using labeled data, ˆγall is the OLS coefficient of ˆY on X using all labeled and unlabeled data, and
+ˆ
+M is a tuning matrix. The formulation of the estimator is similar to (10), while the choice of ˆ
+M can
+be different since SUR assumes an underlying model. Similar ideas have also been applied recently to
+genome-wide association studies, such as McCaw et al. [2024] and Miao et al. [2024], under different
+modeling assumptions.
+We refer interested readers to Gronsbell et al. [2024] for a more detailed
+discussion.
+Causal Inference with Multiple Data Sources. Yang and Ding [2019] considers the problem
+of average treatment effect estimation using two data sources: one that includes all confounders and
+another that omits a subset of confounders. Specifically, the first dataset includes (Ai, Xi, Ui, Yi)n
+i=1,
+and the second dataset includes (Ai, Xi, Yi)n+N
+i=n+1.
+In this setting, Ai is a binary treatment, Yi is
+the outcome variable with Yi = Yi(1)Ai + Yi(0)(1 −Ai), where (Yi(1), Yi(0)) is the pair of potential
+outcomes, and (Xi, Ui) is the set of confounders satisfying the strong ignorability assumption: Ai ⊥
+⊥(Yi(1), Yi(0)) | Xi, Ui. Similarly as in the PPI setting, they assume the distribution of (Ai, Xi, Yi)
+is identical in the two datasets. Under their assumptions, the average treatment effect θ⋆= E[Y (1) −
+Y (0)] can be identified through an estimating equation mθ(A, X, U, Y ). For example, we can set
+m(θ,η)(A, X, U, Y ) =
+AY
+eη(X, U) −
+(1 −A)Y
+1 −eη(X, U) −θ,
+(17)
+where eη(X, U) is a correctly specified parametric model for the propensity score P(A = 1 | X, U).
+Yang and Ding [2019] essentially apply the estimator of Chen and Chen [2000] with hγ being another
+estimating equation ˜m(A, X, Y ), e.g.,
+˜m(θ,˜η)(A, X, Y ) =
+AY
+˜e˜η(X) −(1 −A)Y
+1 −˜e˜η(X) −θ,
+(18)
+25
+
+===== PAGE 26 =====
+where ˜e˜η(X) is an error-prone propensity score model. However, they do not study the optimal choice
+of ˜m. Similarly, the optimal ˜m in this setting is given by E[m(θ,η)(A, X, U, Y ) | A, X, Y ]. With the
+choice (17), this reduces to
+˜m(θ,η)(A, X, Y ) = AY E
+
+1
+eη(X, U) | A, X, Y
+
+−(1 −A)Y E
+
+1
+1 −eη(X, U) | A, X, Y
+
+−θ.
+(19)
+This is different from (18), implying that the estimator of Yang and Ding [2019] is inefficient in general
+and can be improved using (19) instead of (18).
+B
+The role of cross-fitting
+In existing surrogate outcome literature [Robins et al., 1994, Chen and Chen, 2000, Chen et al.,
+2008a], although the semi-parametric efficiency is established when using the optimal score function
+s⋆(X, ˆY ) = E[∇ℓθ⋆(X, Y )|X, ˆY ], the computation strategy for achieving the efficiency is generally
+unclear. In practice, s⋆(X, ˆY ) is hardly known in prior and needs to be fitted using samples. In our
+methodology (Algorithm 1), we use the cross-fitting strategy to divide the samples for estimating the
+optimal score and making inference, and we prove in Theorem 2 that this strategy can recover the semi-
+parametric efficiency when the optimal score function is consistently estimated. In regular settings
+where the fitted score belongs to a fixed Donsker class (such as the fixed-dimensional parametric models
+advocated by Chen and Chen [2000], Chen et al. [2008a]), classical empirical process theory implies
+that using the same sample to fit the score and make inference is valid. However, in applications
+with modern machine learning models, the optimal imputed loss is often complicated and can not be
+consistently learned through the P-donsker class, such as a fixed-dimensional parametric model. This
+aligns with the benefits of cross-fitting advocated in Chernozhukov et al. [2018]: it relaxes the strong
+Donsker class requirements and enabled the usage of flexible learners.
+We now make this distinction explicit through a theoretical analysis. For any function a(X, Y, ˆY ),
+write
+Pna = 1
+n
+n
+X
+i=1
+a(Xi, Yi, ˆYi),
+and for any function b(X, ˆY ), write
+Pnb = 1
+n
+n
+X
+i=1
+b(Xi, ˆYi),
+PNb = 1
+N
+n+N
+X
+i=n+1
+b(Xi, ˆYi),
+¯Pn,Nb =
+n
+n + N Pnb +
+N
+n + N PNb.
+For centered empirical processes, we write:
+Gna =
+1
+√n
+n
+X
+i=1
+{a(Xi, Yi, ˆYi) −Ea(X, Y, ˆY )},
+ˆGnb =
+1
+√n
+n
+X
+i=1
+{b(Xi, ˆYi) −Eb(X, ˆY )},
+ˆGNb =
+1
+√
+N
+n+N
+X
+i=n+1
+{b(Xi, ˆYi) −Eb(X, ˆY )}.
+First, consider the fixed-score version of the RePPI estimating equation. For a possibly misspecified
+score limit s(X, ˆY ) and a fixed matrix M, the linearized imputed loss is
+gθ(X, ˆY ) =
+N
+n + N θ⊤Ms(X, ˆY ),
+26
+
+===== PAGE 27 =====
+so that the corresponding estimating equation is
+0 = Pn∇ℓθ +
+N
+n + N M{PNs −Pns}.
+(20)
+If s is fixed, then the standard Taylor expansion argument (see proof of Theorem 1 in Appendix C.1
+for details) gives
+√n(ˆθPPI −θ⋆) = −H−1
+θ⋆
+
+Gn∇ℓθ⋆+
+N
+n + N M
+r n
+N
+ˆGNs −ˆGns
+
++ op(1).
+(21)
+When M = Cov(∇ℓθ⋆, s)Cov(s)−1, the variance in (21) is exactly ΣRePPI
+s
+in Theorem 2.
+The issue is what happens if the same labeled observations are used both to fit the score and to
+evaluate the labeled correction term. Let ˆsAll
+θ
+denote a score learner trained on all labeled observations,
+and let ˆsAll
+θ⋆be its value at θ⋆. A same-sample linearized implementation uses the moment
+0 = Pn∇ℓθ +
+N
+n + N M{PN ˆsAll
+θ −PnˆsAll
+θ }.
+(22)
+This formulation also captures the local behavior of a same-sample flexible extension of the CC-
+estimator (5). Indeed, if a whole fitted score family ˆsAll
+θ
+is used in the CC construction, define
+ˆθ
+XY−only
+ˆs
+∈{θ : PnˆsAll
+θ
+= 0} ,
+ˆθAll
+ˆs
+∈
+
+θ : ¯Pn,N ˆsAll
+θ
+= 0
+	
+,
+and
+ˆθCC
+ˆs
+= ˆθXY−only −ˆ
+Ms(ˆθ
+XY−only
+ˆs
+−ˆθAll
+ˆs ).
+A Taylor expansion of the two-score equations shows that the same empirical-process term derived
+below also enters this CC implementation.
+Proposition 4 (Same-sample score learning and the extra term). Let ˆsAll
+θ⋆be trained on the labeled
+sample and suppose that,
+E
+h
+∥ˆsAll
+θ⋆(X, ˆY ) −s(X, ˆY )∥2i
+= op(1).
+Suppose further that the same-sample empirical process has the expansion
+RAll
+n,s := Gn{ˆsAll
+θ⋆−s} = bn + 1
+√n
+n
+X
+i=1
+ζ(Xi, Yi, ˆYi) + op(1),
+(23)
+where bn →b and ζ has mean zero and finite second moment.
+Assume also that
+ˆ
+M →p M and
+Assumption 1 and 2 hold. Then the solution ˆθSame to (22) satisfies
+√n(ˆθSame −θ⋆) = −H−1
+θ⋆
+"
+Gn∇ℓθ⋆+
+N
+n + N M
+ r n
+N
+ˆGNs −ˆGns
+
+−b −1
+√n
+n
+X
+i=1
+ζ(Xi, Yi, ˆYi)
+! #
++ op(1).
+(24)
+Proof. Set ∆n = ˆsAll
+θ⋆−s. Expanding (22) at θ⋆gives
+√n
+
+Pn∇ℓθ⋆+
+N
+n + N M{PN ˆsAll
+θ⋆−PnˆsAll
+θ⋆}
+
+= Gn∇ℓθ⋆+
+N
+n + N M
+r n
+N
+ˆGNs −ˆGns
+
++
+N
+n + N M√n(PN −P)∆n −
+N
+n + N MRAll
+n,s + op(1).
+27
+
+===== PAGE 28 =====
+The unlabeled sample is independent of ∆n conditional on the fitted score. Therefore,
+E
+h√n(PN −P)∆n
+2i
+= n
+N ∥∆n∥2
+L2(P) = op(1).
+Substituting (23) gives the expansion of the moment at θ⋆. A Taylor expansion of the moment in θ
+and nonsingularity of Hθ⋆yield (24).
+Proposition 4 separates the regular and flexible regimes. If ˆsAll
+θ⋆lies with probability tending to one
+in a fixed P-Donsker class and ∥ˆsAll
+θ⋆−s∥L2(P) →p 0, then stochastic equicontinuity gives RAll
+n,s = op(1).
+Hence same-sample fitting and cross-fitting are first-order equivalent in regular parametric or Donsker
+settings. For flexible learners, however, RAll
+n,s need not vanish, which may introduce extra bias and
+variance. Cross-fitting removes this term by construction, because each labeled observation is evaluated
+by a score learner trained without that observation.
+Below, we provide a concrete example to show the failure of the same-sample fitting strategy when
+a flexible score learner is used.
+Example 4 (A simple example for the failure of same sample score estimates). Consider scalar mean
+estimation with loss
+ℓθ(X, Y ) = 1
+2(Y −θ)2.
+Let ˆY , ϵ, X be independent N(0, 1), and Y = ˆY + ϵ. Then θ⋆= EY = 0, and the oracle imputed score
+is
+sθ(X, ˆY ) = E{∇θℓθ(X, Y ) | X, ˆY } = θ −ˆY .
+Let Dn = {(Xi, Yi, ˆYi)}n
+i=1 denote the labeled sample. Given Dn, define the same-sample interpo-
+lating score learner
+ˆsn(X, ˆY ) =
+(
+θ −Yi,
+if X = Xi for some i ∈{1, . . . , n},
+θ −ˆY + Tn(X, ˆY ),
+otherwise.
+Since X has a continuous distribution, X1, . . . , Xn are distinct almost surely, so the above definition is
+unambiguous almost surely. Here, the learner sn(X, ˆY ) interpolates the training samples to represent
+the common overfitting phenomenon in modern machine learning. On test samples, we assume it
+learns the optimal score with some error Tn(X, ˆY ). If E[∥Tn(X, ˆY )∥2] →0, then the fitted score is
+perfectly out-of-sample consistent:
+E
+
+ˆsn(X, ˆY ) −s(X, ˆY )
+2
+→0
+a.s.
+(25)
+Thus, Theorem 2 implies that the RePPI estimator achieves the optimal efficiency. On the contrary,
+the PPI estimator (7) (or the CC estimator (5) from Chen and Chen [2000]) using the same sample
+fitting strategy with score ˆsn leads to the estimator
+ˆθSame = 1
+n
+n
+X
+i=1
+Yi −ˆ
+M
+ 
+1
+n
+n
+X
+i=1
+Yi −
+1
+n + N
+ n
+X
+i=1
+Yi +
+n+N
+X
+i=n+1
+( ˆYi + Tn(Xi, ˆYi)))
+!!
+,
+(26)
+where ˆ
+M = d
+Cov(θ −Y, ˆsn(X, ˆY ))/d
+Var(ˆsn(X, ˆY )). There are several problems with this approach:
+28
+
+===== PAGE 29 =====
+1. The excessive term RAll
+n,s = −1
+√n
+Pn
+i=1 ϵi −√n E{Tn(X, ˆY )} in (23) can bring additional error
+in asymptotics. For example, if Tn(X, ˆY ) =
+1
+√n, the model is biased, then the L2 consistency
+condition (25) still holds, M = q, and we have
+ˆθSame =
+1
+n + N
+ n
+X
+i=1
+Yi +
+n+N
+X
+i=n+1
+( ˆYi + Tn(Xi, ˆYi)))
+!
+,
+(27)
+and thus √n(ˆθSame −θ⋆) ∼N(
+1
+1+r, (1 +
+r
+1+r)
+r
+1+r), it is biased in the root-n regime.
+2. Even if we assume the asymptotic distribution is still correct (the same as Theorem 2). Without
+sample splitting, it is impossible to consistently estimate the asymptotic variance (14), which
+involves the covariance of Y and ˆsn(X, ˆY ) and thus has a different value on labeled data and the
+true population. Therefore, the final confidence intervals can be invalid.
+Example 4 is deliberately simple, but it captures the practical failure mode: a highly adaptive
+learner can behave almost correctly on new observations while memorizing training data from labeled
+observations. Cross-fitting rules out this own-observation contribution by construction. Hence, the
+cross-fitting procedure in RePPI is not to improve over regular parametric CC fitting; it is to make
+flexible recalibration of the optimal imputed-loss gradient compatible with the fixed-score variance
+theory under weak out-of-sample convergence conditions.
+In addition, we illustrate this idea using a straightforward simulation example of the mean estima-
+tion, where the target is θ⋆= E(Y ) = 0 and
+ˆY ∼Unif[0, 1],
+Y = f(ˆY ) + ϵ,
+f(x) = sin(2πx),
+ϵ ∼N(0, 1).
+The optimal score is s⋆( ˆY ) = θ −f(ˆY ). We use two different learners to learn m:
+1. Parametric learner: A ridge regression using degree-5 polynomial features of ˆY .
+2. Flexible learner: A decision tree model using ˆY .
+Since the flexible learner has a much larger model capacity, it is very likely to overfit to the noise
+and perform differently on the training data (labeled data) and testing data (unlabeled data), which
+makes the inference procedure invalid.
+After we get an estimate ˆf, we can plug in and obtain the estimate for the optimal score ˆs = θ −ˆf.
+For a fitted function ˆf, the estimator is
+ˆθ = 1
+n
+n
+X
+i=1
+Yi −ˆ
+M
+ 
+1
+n
+n
+X
+i=1
+ˆf( ˆYi) −
+1
+n + N
+n+N
+X
+i=1
+ˆf( ˆYi)
+!
+,
+ˆ
+M =
+d
+Cov(Y, ˆf( ˆYi))
+d
+Var( ˆf( ˆYi))
+.
+The no-split version uses in-sample fitted values ˆm( ˆYi) on the labeled data; the cross-fitted version uses
+out-of-fold fitted values. Table 4 reports the experiment result with n = 500, N = 5000, α = 0.95,
+and 200 Monte Carlo repetitions. Here, the empirical s.d. is the standard deviation of ˆθ over 200
+repetitions, and it represents the true uncertainty. The reported standard error is the usual fixed-
+score standard error that is used to construct confidence intervals
+"
+1
+n
+ 
+d
+Var(Y ) −
+1
+1 + r
+Cov(Yi, ˆf(Yi))
+Var( ˆf(Yi))
+!#1/2
+.
+As we can see, when we use a decision tree model and the same sample fitting strategy, as the model
+complexity increases, the reported standard error significantly underestimates the true uncertainty,
+29
+
+===== PAGE 30 =====
+Learner
+Method
+Empirical s.d.
+Reported s.e.
+Coverage
+Polynomial Regression
+Same-sample
+0.0449
+0.0491
+0.955
+Polynomial Regression
+Cross-fit
+0.0450
+0.0495
+0.955
+Decision Tree (max depth=5)
+Same-sample
+0.0470
+0.0422
+0.930
+Decision Tree (max depth=5)
+Cross-fit
+0.0481
+0.0494
+0.950
+Decision Tree (max depth=10)
+Same-sample
+0.0507
+0.0318
+0.790
+Decision Tree (max depth=10)
+Cross-fit
+0.0580
+0.0569
+0.950
+Decision Tree (max depth=None)
+Same-sample
+0.0546
+0.0165
+0.445
+Decision Tree (max depth=None)
+Cross-fit
+0.0614
+0.0620
+0.940
+Table 4: A simulation illustrating the role of cross-fitting. With a regular parametric model, no-
+split and cross-fitted estimation are first-order equivalent.
+With a decision tree, the same-sample
+fitted values may interpolate labeled noise, leading to an incorrect inference procedure. As model
+complexity increases, the confidence interval’s coverage decreases as overfitting becomes more severe.
+Cross-fitting restores approximately valid fixed-score inference.
+and the confidence intervals are invalid. This is because the report’s standard error is computed using
+labeled data, which can not capture the out-of-sample uncertainty when the labeled data are used
+as training samples. On the contrary, the cross-fitting method can always measure the uncertainty
+correctly and provide a valid confidence interval regardless of the model complexity. For the low-
+dimensional parametric model, both methods can yield a valid confidence interval, which explains
+why the importance of cross-fitting is not emphasized in existing literature.
+C
+Proofs from Section 3
+C.1
+Proof of Theorem 1
+We first state the regularity conditions required in Theorem 1.
+Assumption 1. The loss function ℓθ(X, Y ) and the imputed loss gθ(X, ˆY ) satisfy the following con-
+ditions:
+1. ℓθ(X, Y ) and gθ(X, ˆY ) are convex in θ and differentiable at θ⋆;
+2. ℓθ(X, Y ) and gθ(X, ˆY ) are locally Lipschitz around θ⋆, i.e., there exist a neighborhood of θ⋆such
+that ℓθ(X, Y ) is M1(x, y) Lipschitz and gθ(X, ˆY ) is M2(x, y) Lipschitz in θ, and E[M1(X, Y ) +
+M2(X, ˆY )] < ∞;
+3. The population losses L(θ) = E[ℓθ(X, Y )] have positive definite Hessian matrices at θ⋆;
+4. The covariance matrices Cov(∇ℓθ⋆(X, Y )) and Cov(∇gθ⋆(X, ˆY )) are both semipositive definite.
+Assumption 1 is a standard assumption to prove asymptotic normality, and a similar assumption
+has been imposed in Angelopoulos et al. [2023b]. Below we provide a self-contained proof of Theorem 1,
+though it can be derived as a corollary of Robins et al. [1994] with slight modification.
+of Theorem 1. First, we prove that ˆθPPI
+g
+is consistent. Denote the loss function in (7) by
+LPPI
+g
+(θ) := 1
+n
+n
+X
+i=1
+ℓθ(Xi, Yi) −
+ 
+1
+n
+n
+X
+i=1
+gθ(Xi, ˆYi) −1
+N
+n+N
+X
+i=n+1
+gθ(Xi, ˆYi)
+!
+.
+30
+
+===== PAGE 31 =====
+Since (Xi, ˆYi) has the same distribution in the labeled and unlabeled data, we know E[LPPI
+g
+(θ)] = L(θ).
+Using a standard covering argument (e.g., see Theorem 9.2 in Keener [2010]), Assumption 1 implies
+that there exist ϵ > 0 such that
+sup
+θ:∥θ−θ⋆∥≤ϵ
+|LPPI
+g
+(θ) −L(θ)|
+p−→0.
+Since θ⋆is unique, for all ϵ > 0, we know there exists a δ > 0 such that L(θ) −L(θ⋆) ≥δ for all θ on
+the ϵ-shell {θ | ∥θ −θ⋆∥= ϵ} around θ⋆. With this we can write
+inf
+∥θ−θ⋆∥=ϵ LPPI
+g
+(θ) −LPPI
+g
+(θ⋆)
+=
+inf
+∥θ−θ⋆∥=ϵ((LPPI
+g
+(θ) −L(θ)) + (L(θ) −L(θ⋆)) + (L(θ⋆) −LPPI
+g
+(θ⋆)))
+≥δ −2
+sup
+θ:∥θ−θ⋆∥≤ϵ
+|LPPI
+g
+(θ) −L(θ)|
+≥δ −oP (1).
+Then, for any θ such that ∥θ −θ⋆∥≥ϵ, let θ1 = θ⋆+
+θ−θ⋆
+∥θ−θ⋆∥ϵ. The convexity of LPPI
+g
+(θ) implies
+LPPI
+g
+(θ) −LPPI
+g
+(θ⋆) ≥∥θ −θ⋆∥
+∥θ1 −θ⋆∥
+ LPPI
+g
+(θ1) −LPPI
+g
+(θ⋆)
+
+≥δ −oP (1).
+Therefore, no θ with ∥θ −θ⋆∥≥ϵ can minimize LPPI
+g
+, which implies
+P(∥ˆθPPI
+g
+−θ⋆∥< ϵ) →1.
+Since this holds for any ϵ > 0, we can conclude that ˆθPPI
+g
+is consistent: ˆθPPI
+g
+p−→θ⋆.
+Now we turn to the asymptotic normality. For any function h, we use the following shorthand
+notation
+Enh := 1
+n
+n
+X
+i=1
+h(Xi, Yi),
+Gnh = √n(Enh −E[h(X, Y )]);
+ˆENh := 1
+N
+N+n
+X
+i=n+1
+h(Xi, ˆYi),
+ˆGNh :=
+√
+N(ˆENh −E[h(X, ˆY )]);
+ˆEnh := 1
+n
+n
+X
+i=1
+h(Xi, ˆYi),
+ˆGnh := √n(ˆEnh −E[h(X, ˆY )]).
+By Lemma 19.31 in Van der Vaart [2000], Assumption 1 implies that for every (possibly random)
+sequence hn = OP (1),
+Gn
+√n
+
+ℓθ⋆+ hn
+√n −ℓθ⋆
+
+−h⊤
+n ∇ℓθ⋆
+
+P−→0;
+ˆGN
+√n
+
+gθ⋆+ hn
+√n −gθ⋆
+
+−h⊤
+n ∇gθ⋆
+
+P−→0;
+ˆGn
+√n
+
+gθ⋆+ hn
+√n −gθ⋆
+
+−h⊤
+n ∇gθ⋆
+
+P−→0.
+Applying a second-order Taylor expansion and using the fact that ∇L(θ⋆) = 0, we obtain that
+nEn
+
+ℓθ⋆+ hn
+√n −ℓθ⋆
+
+=n
+
+L
+
+θ⋆+ hn
+√n
+
+−L(θ⋆)
+
++ h⊤
+n Gn∇ℓθ⋆+ oP (1)
+=1
+2h⊤
+n Hθ⋆hn + h⊤
+n Gn∇ℓθ⋆+ oP (1).
+(28)
+31
+
+===== PAGE 32 =====
+Similarly, we have
+nˆEN
+
+gθ⋆+ hn
+√n −gθ⋆
+
+=n
+
+G
+
+θ⋆+ hn
+√n
+
+−G(θ⋆)
+
++
+r n
+N h⊤
+n ˆGN∇gθ⋆+ oP (1),
+nˆEn
+
+gθ⋆+ hn
+√n −gθ⋆
+
+=n
+
+G
+
+θ⋆+ hn
+√n
+
+−G(θ⋆)
+
++ h⊤
+n ˆGn∇gθ⋆+ oP (1).
+(29)
+Combining (28) and (29), we obtain
+n
+
+LPPI
+g
+
+θ⋆+ hn
+√n
+
+−LPPI
+g
+(θ⋆)
+
+= 1
+2h⊤
+n Hθ⋆hn + h⊤
+n
+
+Gn∇ℓθ⋆+
+r n
+N
+ˆGN∇gθ⋆−ˆGn∇gθ⋆
+
++ oP (1).
+We now consider two particular choices of the sequence hn. First, consider
+h⋆
+n = √n(ˆθPPI
+g
+−θ⋆).
+By Corollary 5.53 of Van der Vaart [2000] and Assumption 1, the consistency ˆθPPI
+g
+p−→θ⋆implies that
+h⋆
+n = OP (1). This yields
+n
+
+LPPI
+g
+(ˆθPPI
+g
+) −LPPI
+g
+(θ⋆)
+
+=1
+2h⋆⊤
+n Hθ⋆h⋆
+n
++h⋆⊤
+n
+
+Gn∇ℓθ⋆+
+r n
+N
+ˆGN∇gθ⋆−ˆGn∇gθ⋆
+
++ oP (1).
+Similarly, we can choose
+hn = −H−1
+θ⋆
+
+Gn∇ℓθ⋆+
+r n
+N
+ˆGN∇gθ⋆−ˆGn∇gθ⋆
+
+,
+which is OP (1) by the central limit theorem, and this gives
+n
+
+LPPI
+g
+
+θ⋆+ hn
+√n
+
+−LPPI
+g
+(θ⋆)
+
+= −1
+2h⊤
+n Hθ⋆hn + oP (1).
+Since ˆθPPI
+g
+is defined as the minimizer of LPPI
+g
+, we know that
+n
+
+LPPI
+g
+(ˆθPPI
+g
+) −LPPI
+g
+(θ⋆)
+
+≤n
+
+LPPI
+g
+(θ⋆+ hn
+√n) −LPPI
+g
+(θ⋆)
+
+⇒
+1
+2h⋆⊤
+n Hθ⋆h⋆
+n −h⋆⊤
+n Hθ⋆hn ≤−1
+2h⊤
+n Hθ⋆hn + oP (1)
+⇒
+1
+2(h⋆
+n −hn)⊤Hθ⋆(h⋆
+n −hn) = oP (1)
+⇒
+h⋆
+n = hn + oP (1)
+⇒
+√n(ˆθPPI
+g
+−θ⋆) = −H−1
+θ⋆
+
+Gn∇ℓθ⋆+
+r n
+N
+ˆGN∇gθ⋆−ˆGn∇gθ⋆
+
++ oP (1).
+32
+
+===== PAGE 33 =====
+By the central limit theorem, the right-hand side is asymptotically normal:
+Gn∇ℓθ⋆+
+r n
+N
+ˆGN∇gθ⋆−ˆGn∇gθ⋆
+=
+r n
+N
+1
+√
+N
+n+N
+X
+i=n+1
+
+∇gθ⋆(Xi, ˆYi) −E[∇gθ⋆(X, ˆY )]
+
++ 1
+√n
+n
+X
+i=1
+
+∇ℓθ⋆(Xi, Yi) −∇gθ⋆(Xi, ˆYi) −E[∇ℓθ⋆(X, Y ) −∇gθ⋆(X, ˆY )]
+
+d−→N(0, rCov(∇gθ⋆(X, ˆY )) + Cov(∇ℓθ⋆(X, Y ) −∇gθ⋆(X, ˆY ))).
+Thus
+√n(ˆθPPI
+g
+−θ⋆) = −H−1
+θ⋆
+
+Gn∇ℓθ⋆+
+r n
+N
+ˆGN∇gθ⋆−ˆGn∇gθ⋆
+
++ oP (1) d−→N(0, ΣPPI
+g
+),
+where
+ΣPPI
+g
+= H−1
+θ⋆
+
+rCov(∇gθ⋆(X, ˆY )) + Cov(∇ℓθ⋆(X, Y ) −∇gθ⋆(X, ˆY ))
+
+H−1
+θ⋆.
+(30)
+From (30), we can identify the optimal g, i.e. the one that minimizes the asymptotic variance.
+Notice that
+ΣPPI
+g
+= H−1
+θ⋆
+
+(1 + r)Cov(∇gθ⋆(X, ˆY )) + Cov(∇ℓθ⋆(X, Y ))
+−2Cov(∇ℓθ⋆(X, Y ), ∇gθ⋆(X, ˆY ))
+
+H−1
+θ⋆
+= H−1
+θ⋆
+
+(1 + r)Cov
+
+∇gθ⋆(X, ˆY ) −
+1
+1 + r∇ℓθ⋆(X, Y )
+
++
+r
+1 + rCov(∇ℓθ⋆(X, Y ))
+
+H−1
+θ⋆
+Since the covariance matrix is positive semi-definite, the minimum is achieved when
+∇gθ⋆=
+1
+1 + rE[∇ℓθ⋆(X, Y )|X, ˆY ].
+That is, for any other function g′, we have ΣPPI
+g′
+⪰ΣPPI
+g
+. Under the optimal g, we have
+ΣPPI
+g
+=H−1
+θ⋆
+
+1
+1 + rE
+h
+Cov
+
+∇ℓθ⋆(X, Y )|X, ˆY
+i
++
+r
+1 + rCov(∇ℓθ⋆(X, Y ))
+
+H−1
+θ⋆
+=H−1
+θ⋆
+
+E
+h
+Cov
+
+∇ℓθ⋆(X, Y )|X, ˆY
+i
++
+r
+1 + rCov
+
+E
+h
+∇ℓθ⋆(X, Y )|X, ˆY
+i
+H−1
+θ⋆
+=H−1
+θ⋆
+
+Cov(∇ℓθ⋆(X, Y )) −
+1
+1 + rCov(E[∇ℓθ⋆(X, Y )|X, ˆY ])
+
+H−1
+θ⋆.
+C.2
+Proof of Theorem 2
+We introduce an additional assumption on the gradient of the loss function ℓθ.
+Assumption 2. The gradient ∇ℓθ(X, ˆY ) is differentiable and locally Lipschitz around θ⋆, i.e., there
+exist a neighborhood of θ⋆such that ∇ℓθ(X, ˆY ) is M3(X, ˆY ) Lipschitz in θ, and E[M3(X, ˆY )] < ∞.
+33
+
+===== PAGE 34 =====
+We start with an intermediate result that serves as a building block for Theorem 2.
+Theorem 3. Let the target θ⋆defined in (6) be unique and assume n/N →r. Assume that ˆs(X, ˆY )
+is a random function such that E[∥ˆs(X, ˆY ) −s(X, ˆY )∥2]
+p−→0 as n →∞, for some fixed function s.
+Let ˆgθ(X, ˆY ) =
+1
+1+n/N θ⊤ˆ
+Mˆs(X, ˆY ), where ˆ
+M is computed by (13). Then, under Assumptions 1 and
+2, ˆθPPI
+ˆg
+p−→θ⋆and √n(ˆθPPI
+ˆg
+−θ⋆) d−→N(0, ΣRePPI
+s
+), where ΣRePPI
+s
+is defined in Theorem 2.
+Proof. For notational convenience, we write ∇ℓθ, ˆs, s for ∇ℓθ(X, Y ), ˆs(X, ˆY ), s(X, ˆY ). By the law of
+large number, the estimated weight matrix ˆ
+M converges to the population optimal matrix M:
+ˆ
+M = d
+Cov(∇ℓˆθ0, ˆs)d
+Cov(ˆs)−1 p−→Cov(∇ℓθ⋆, s)Cov(s)−1 = M.
+The consistency of ˆθPPI
+ˆg
+then follows from the same argument as in the proof of Theorem 1.
+Now we turn to the proof of asymptotic normality. Since ˆθPPI
+ˆg
+is a consistent estimator of θ⋆, by
+Assumption 2 and Lemma 19.24 of Van der Vaart [2000], we have
+ˆGn
+h
+∇ℓˆθPPI
+ˆg
+−∇ℓθ⋆
+i p−→0,
+(31)
+Moreover, since E∥ˆs −s∥2 p−→0, Lemma 19.24 of Van der Vaart [2000] implies that
+ˆGN [(ˆs −s)]
+p−→0, ˆGn [(ˆs −s)]
+p−→0.
+(32)
+By the convexity of ℓ, ˆθPPI
+ˆg
+solves the estimating equation
+ΦInit
+ˆg (θ) := 1
+n
+n
+X
+i=1
+∇ℓθ(Xi, Yi) +
+1
+1 + n/N
+ˆ
+M
+ 
+1
+N
+n+N
+X
+i=n+1
+ˆs(Xi, ˆYi) −1
+n
+n
+X
+i=1
+ˆs(Xi, ˆYi)
+!
+= 0.
+Define Ψ(θ) := E[∇ℓθ(X, Y )] = ∇L(θ), then by the convexity of the loss function ℓ, Ψ(θ⋆) = 0. By
+Assumption 2, Ψ(θ) is differentiable, we can apply Lemma 2.12 in Van der Vaart [2000] and obtain
+that
+√nHθ⋆(ˆθPPI
+ˆg
+−θ⋆) + √n · oP (∥ˆθPPI
+ˆg
+−θ⋆∥) = √n(Ψ(ˆθPPI
+ˆg
+) −Ψ(θ⋆)) + oP (1).
+Notice that ΦInit
+ˆg (ˆθPPI
+ˆg
+) = 0, and therefore
+√n(Ψ(ˆθPPI
+ˆg
+) −Ψ(θ⋆))
+=√n(Ψ(ˆθPPI
+ˆg
+) −ΦInit
+ˆg (ˆθPPI
+ˆg
+))
+= −
+
+Gn∇ℓˆθPPI
+ˆg
++
+1
+1 + n/N
+ˆ
+M
+r n
+N
+ˆGN ˆs −ˆGnˆs
+
+= −
+
+Gn∇ℓθ⋆+
+
+1
+1 + rM + oP (1)
+ r n
+N
+ˆGNs −ˆGns + oP (1)
+
+= −
+
+Gn∇ℓθ⋆+
+1
+1 + rM
+r n
+N
+ˆGNs −ˆGns
+
++ oP (1)
+34
+
+===== PAGE 35 =====
+By the central limit theorem, the right-hand side is asymptotically normal:
+Gn∇ℓθ⋆+
+1
+1 + rM
+r n
+N
+ˆGNs −ˆGns
+
+=
+r n
+N
+1
+√
+N
+n+N
+X
+i=n+1
+1
+1 + rM
+
+s(Xi, ˆYi) −E[s(X, ˆY )]
+
++ 1
+√n
+n
+X
+i=1
+
+∇ℓθ⋆(Xi, Yi) −
+1
+1 + rMs(Xi, ˆYi) −E[∇ℓθ⋆(X, Y ) −
+1
+1 + rMs(X, ˆY )]
+
+d−→N(0, Λ) = OP (1),
+where the variance
+Λ =
+r
+(1 + r)2 Cov(Ms) + Cov
+
+∇ℓθ⋆−
+1
+1 + rMs
+
+=Cov(∇ℓθ⋆) −
+1
+1 + rCov(∇ℓθ⋆, s)Cov(s)−1Cov(s, ∇ℓθ⋆).
+(33)
+Therefore,
+√n∥ˆθPPI
+ˆg
+−θ⋆∥≤∥H−1
+θ⋆∥√n∥Hθ⋆(ˆθPPI
+ˆg
+−θ⋆)∥= OP (1) + oP (√n∥ˆθPPI
+ˆg
+−θ⋆∥).
+This implies that √n∥ˆθPPI
+ˆg
+−θ⋆∥= OP (1), and we conclude that
+√n(ˆθPPI
+ˆg
+−θ⋆) = √nH−1
+θ⋆(Ψ(ˆθPPI
+ˆg
+) −Ψ(θ⋆)) + oP (1)
+= −H−1
+θ⋆
+
+Gn∇ℓθ⋆+
+1
+1 + rM
+r n
+N
+ˆGNs −ˆGns
+
++ oP (1) d−→N(0, ΣRePPI
+s
+),
+(34)
+as desired.
+Now we are ready to prove Theorem 2.
+of Theorem 2. By Theorem 3, each of the estimates ˆθ1, ˆθ2, ˆθ3 is consistent, and therefore
+ˆθCrossFit = |D1|ˆθ1 + |D2|ˆθ2 + |D3|ˆθ3
+n
+p−→θ⋆.
+Moreover, applying the asymptotic linear expansion (34) in the proof of Theorem 3, we know that
+p
+|Dk|(ˆθk −θ⋆) = −H−1
+θ⋆
+ 
+Gk
+n∇ℓθ⋆+
+1
+1 + rM
+ r
+|Dk|
+N
+ˆGNs −ˆGk
+ns
+!!
++ oP (1)
+= −H−1
+θ⋆
+r
+|Dk|
+N
+1
+√
+N
+n+N
+X
+i=n+1
+1
+1 + rM
+
+s(Xi, ˆYi) −E[s(X, ˆY )]
+
+−H−1
+θ⋆
+1
+p
+|Dk|
+X
+i∈Dk
+
+∇ℓθ⋆(Xi, Yi) −
+1
+1 + rMs(Xi, ˆYi) −E[∇ℓθ⋆(X, Y ) −
+1
+1 + rMs(X, ˆY )]
+
++ oP (1),
+35
+
+===== PAGE 36 =====
+where the notation Gk
+n, ˆGk
+n is the analogy of Gn, ˆGn defined on the respective fold. Therefore, combining
+all three linear expansions together, we obtain that
+√n(ˆθCrossFit −θ⋆) =
+X
+k=1,2,3
+r
+|Dk|
+n
+p
+|Dk|(ˆθk −θ⋆)
+= −H−1
+θ⋆
+r n
+N
+1
+√
+N
+n+N
+X
+i=n+1
+1
+1 + rM
+
+s(Xi, ˆYi) −E[s(X, ˆY )]
+
+−H−1
+θ⋆
+1
+√n
+n
+X
+i=1
+
+∇ℓθ⋆(Xi, Yi) −
+1
+1 + rMs(Xi, ˆYi) −E[∇ℓθ⋆(X, Y ) −
+1
+1 + rMs(X, ˆY )]
+
++ oP (1)
+d−→N
+
+0, H−1
+θ⋆
+
+Cov(∇ℓθ⋆) −
+1
+1 + rCov(∇ℓθ⋆, s)Cov(s)−1Cov(s, ∇ℓθ⋆)
+
+H−1
+θ⋆
+
+,
+where the last equation is obtained from (33), and this concludes the proof.
+D
+Proofs from Section 4
+This section provides a detailed computation of the asymptotic variance for the three examples from
+Section 4. The asymptotic variances of the XY-only and PPI estimators are given by ΣPPI
+g
+in Theorem 1
+with g = 0 and g = ∇ℓθ, respectively. The asymptotic variance of the PPI++ estimator is derived
+in Angelopoulos et al. [2023b] (Theorem 1 and Proposition 2) and we state it below for completeness.
+Here, we focus on the PPI++ estimator with the optimal power tuning. We summarize these results
+in Lemma 1.
+Lemma 1. In the same setting as in Theorem 1,
+Tr(ΣXY−only) =Tr(H−1
+θ⋆Cov(∇ℓθ⋆(X, Y ))H−1
+θ⋆);
+Tr(ΣPPI) =Tr(H−1
+θ⋆(rCov(∇ℓθ⋆(X, ˆY )) + Cov(∇ℓθ⋆(X, Y ) −∇ℓθ⋆(X, ˆY )))H−1
+θ⋆);
+Tr(ΣPPI++) =Tr(H−1
+θ⋆Cov(∇ℓθ⋆(X, Y ))H−1
+θ⋆)
+−
+1
+1 + r
+Tr
+
+H−1
+θ⋆Cov(∇ℓθ⋆(X, Y ), ∇ℓθ⋆(X, ˆY ))H−1
+θ⋆
+2
+Tr
+
+H−1
+θ⋆Cov(∇ℓθ⋆(X, ˆY )) H−1
+θ⋆
+
+.
+Moreover, we provide the following lemma useful in the computation of closed-form expressions.
+Lemma 2. If X ∼N(0, ΣX) ∈Rd, and θ ∈Rd is a fixed vector, then
+Tr(Σ−1
+X Cov(XX⊤θ)Σ−1
+X ) = ∥θ∥2 + Tr(Σ−1
+X ) · θ⊤ΣXθ.
+Proof. We write the eigendecomposition ΣX = QDQ⊤, where Q is an orthonormal matrix and D =
+diag(σ2
+1, · · · , σ2
+d) is a diagonal matrix. Then we can write X = QZ, where Z ∼N(0, D) is a normal
+vector with independent coordinates. Notice that
+Cov(XX⊤θ) = E[XX⊤θθ⊤XX⊤] −E[XX⊤]θθ⊤E[XX⊤]
+= E[XX⊤θθ⊤XX⊤] −ΣXθθ⊤ΣX,
+36
+
+===== PAGE 37 =====
+and
+Tr(Σ−1
+X E[XX⊤θθ⊤XX⊤]Σ−1
+X ) =Tr(θθ⊤E[XX⊤Σ−2
+X XX⊤])
+=Tr(θθ⊤QE[ZZ⊤D−2ZZ⊤]Q⊤).
+Let S = E[ZZ⊤D−2ZZ⊤] = E[(Z⊤D−2Z)ZZ⊤], then for i ̸= j,
+Si,j = E
+" d
+X
+k=1
+z2
+k
+σ4
+k
+!
+zizj
+#
+= 0,
+and
+Si,i = E
+" d
+X
+k=1
+z2
+k
+σ4
+k
+!
+z2
+i
+#
+= E[z4
+i ]
+σ4
+i
++
+X
+k̸=i
+E[z2
+kz2
+i ]
+σ4
+k
+= 3 +
+X
+k̸=i
+σ2
+i
+σ2
+k
+= 2 + Tr(D−1)σ2
+i .
+Putting everything together, we have S = 2I + Tr(D−1)D, and
+Tr(Σ−1
+X E[XX⊤θθ⊤XX⊤]Σ−1
+X ) = Tr(θθ⊤Q(2I + Tr(D−1)D)Q⊤)
+= 2Tr(θθ⊤) + Tr(D−1)Tr(θθ⊤ΣX) = 2∥θ∥2 + Tr(Σ−1
+X ) · θ⊤ΣXθ.
+Thus we can conclude that
+Tr(Σ−1
+X Cov(XX⊤θ)Σ−1
+X ) = ∥θ∥2 + Tr(Σ−1
+X ) · θ⊤ΣXθ.
+D.1
+Modality Mismatch
+of Proposition 1. In this setting, we have
+ˆY = W ⊤γ,
+θ⋆= θ,
+Hθ⋆= E[XX⊤] = ΣX.
+Then,
+Tr(H−1
+θ⋆Cov(∇ℓθ⋆(X, Y ))H−1
+θ⋆)
+=Tr(Σ−1
+X Cov(X(X⊤θ −Y ))Σ−1
+X )
+=Tr(Σ−1
+X Cov(X(W ⊤γ + ϵ))Σ−1
+X )
+=Tr(Σ−1
+X Cov(XW ⊤γ)Σ−1
+X ) + Tr(Σ−1
+X Cov(Xϵ)Σ−1
+X )
+=Tr(Σ−1
+X )(σ2 + γ⊤ΣW γ);
+Tr(H−1
+θ⋆Cov(∇ℓθ⋆(X, ˆY ))H−1
+θ⋆)
+=Tr(Σ−1
+X Cov(X(X⊤θ −W ⊤γ))Σ−1
+X )
+=Tr(Σ−1
+X Cov(XX⊤θ)Σ−1
+X ) + Tr(Σ−1
+X Cov(XW ⊤γ)Σ−1
+X )
+=∥θ∥2 + Tr(Σ−1
+X )(θ⊤ΣXθ + γ⊤ΣW γ);
+37
+
+===== PAGE 38 =====
+Tr(H−1
+θ⋆Cov(∇ℓθ⋆(X, Y ), ∇ℓθ⋆(X, ˆY ))H−1
+θ⋆)
+=Tr(Σ−1
+X Cov(X(X⊤θ −Y ), X(X⊤θ −ˆY ))Σ−1
+X )
+=Tr(Σ−1
+X Cov(−X(W ⊤γ + ϵ), X(X⊤θ −W ⊤γ))Σ−1
+X )
+=Tr(Σ−1
+X Cov(XW ⊤γ)Σ−1
+X ) = Tr(Σ−1
+X )γ⊤ΣW γ,
+where the second expression is derived using Lemma 2.
+Using Lemma 1, we can now derive the
+asymptotic variance of the XY-only, PPI, and PPI++ estimators:
+Tr(ΣXY−only) =Tr(H−1
+θ⋆Cov(∇ℓθ⋆(X, Y ))H−1
+θ⋆) = (σ2 + γ⊤ΣW γ)Tr(Σ−1
+X );
+Tr(ΣPPI) =Tr(H−1
+θ⋆(rCov(∇ℓθ⋆(X, ˆY )) + Cov(∇ℓθ⋆(X, Y ) −∇ℓθ⋆(X, ˆY )))H−1
+θ⋆)
+=Tr
+
+H−1
+θ⋆
+
+(1 + r)Cov(∇ℓθ⋆(X, ˆY ))
++ Cov(∇ℓθ⋆(X, Y )) −2Cov(∇ℓθ⋆(X, Y ), ∇ℓθ⋆(X, ˆY ))
+
+H−1
+θ⋆
+
+=(1 + r)∥θ∥2 + (σ2 + (1 + r)θ⊤ΣXθ + rγ⊤ΣW γ)Tr(Σ−1
+X );
+Tr(ΣPPI++) =Tr(H−1
+θ⋆Cov(∇ℓθ⋆(X, Y ))H−1
+θ⋆)
+−
+1
+1 + r
+Tr
+
+H−1
+θ⋆Cov(∇ℓθ⋆(X, Y ), ∇ℓθ⋆(X, ˆY ))H−1
+θ⋆
+2
+Tr
+
+H−1
+θ⋆Cov(∇ℓθ⋆(X, ˆY )) H−1
+θ⋆
+
+=(σ2 + γ⊤ΣW γ)Tr(Σ−1
+X ) −
+1
+1 + r
+(Tr(Σ−1
+X ) · γ⊤ΣW γ)2
+∥θ∥2 + Tr(Σ−1
+X )(θ⊤ΣXθ + γ⊤ΣW γ)
+=
+
+
+σ2 +
+
+
+
+r
+1 + r +
+1
+1 + r
+1
+1 +
+Tr(Σ−1
+X )γ⊤ΣW γ
+∥θ∥2+Tr(Σ−1
+X )θ⊤ΣXθ
+
+
+γ⊤ΣW γ
+
+
+Tr(Σ−1
+X ).
+For our recalibrated PPI estimator, using Theorem 1, we can obtain that
+ΣXY−only −ΣRePPI =
+1
+1 + rCov(E[H−1
+θ⋆∇ℓθ⋆(X, Y )|X, ˆY ])
+=
+1
+1 + rCov(Σ−1
+X E[X(X⊤θ −Y )|X, ˆY ])
+=
+1
+1 + rCov(Σ−1
+X (X(X⊤θ −X⊤θ −W ⊤γ))) =
+1
+1 + rγ⊤ΣW γ · Σ−1
+X ,
+which implies
+Tr(ΣRePPI) =
+
+σ2 +
+r
+1 + rγ⊤ΣW γ
+
+Tr(Σ−1
+X ),
+concluding the proof.
+D.2
+Distribution Shift
+of Proposition 2. In this setting, we have
+ˆY = X⊤˜θ + W ⊤˜γ,
+θ⋆= θ,
+Hθ⋆= E[XX⊤] = ΣX.
+38
+
+===== PAGE 39 =====
+Following the same calculation as in the proof of Proposition 1, we have
+Tr(H−1
+θ⋆Cov(∇ℓθ⋆(X, Y ))H−1
+θ⋆) =(σ2 + γ⊤ΣW γ)Tr(Σ−1
+X );
+Tr(H−1
+θ⋆Cov(∇ℓθ⋆(X, ˆY ))H−1
+θ⋆)
+=Tr(Σ−1
+X Cov(X(X⊤θ −X⊤˜θ −W ⊤˜γ))Σ−1
+X )
+=Tr(Σ−1
+X Cov(XX⊤(θ −˜θ))Σ−1
+X ) + Tr(Σ−1
+X Cov(XW ⊤˜γ)Σ−1
+X )
+=∥θ −˜θ∥2 + Tr(Σ−1
+X )((θ −˜θ)⊤ΣX(θ −˜θ) + ˜γ⊤ΣW ˜γ);
+Tr(H−1
+θ⋆Cov(∇ℓθ⋆(X, Y ), ∇ℓθ⋆(X, ˆY ))H−1
+θ⋆)
+=Tr(Σ−1
+X Cov(X(X⊤θ −Y ), X(X⊤θ −ˆY ))Σ−1
+X )
+=Tr(Σ−1
+X Cov(−X(W ⊤γ + ϵ), X(X⊤θ −X⊤˜θ −W ⊤˜γ))Σ−1
+X )
+=Tr(Σ−1
+X Cov(XW ⊤γ, XW ⊤˜γ)Σ−1
+X )
+=Tr(Σ−1
+X )γ⊤ΣW ˜γ.
+Similarly to Proposition 1,
+Tr(ΣXY−only) =Tr(H−1
+θ⋆Cov(∇ℓθ⋆(X, Y ))H−1
+θ⋆) = (σ2 + γ⊤ΣW γ)Tr(Σ−1
+X );
+Tr(ΣPPI) = Tr(H−1
+θ⋆(rCov(∇ℓθ⋆(X, ˆY )) + Cov(∇ℓθ⋆(X, Y ) −∇ℓθ⋆(X, ˆY )))H−1
+θ⋆)
+=Tr
+
+H−1
+θ⋆
+
+(1 + r)Cov(∇ℓθ⋆(X, ˆY ))
++ Cov(∇ℓθ⋆(X, Y )) −2Cov(∇ℓθ⋆(X, Y ), ∇ℓθ⋆(X, ˆY ))
+
+H−1
+θ⋆
+
+=(1 + r)∥θ −˜θ∥2
++
+
+σ2 + (1 + r)(θ −˜θ)⊤ΣX(θ −˜θ) + r˜γ⊤ΣW ˜γ + (γ −˜γ)⊤ΣW (γ −˜γ)
+
+Tr(Σ−1
+X );
+Tr(ΣPPI++)
+=Tr(H−1
+θ⋆Cov(∇ℓθ⋆(X, Y ))H−1
+θ⋆) −
+1
+1 + r
+Tr
+
+H−1
+θ⋆Cov(∇ℓθ⋆(X, Y ), ∇ℓθ⋆(X, ˆY ))H−1
+θ⋆
+2
+Tr
+
+H−1
+θ⋆Cov(∇ℓθ⋆(X, ˆY )) H−1
+θ⋆
+
+=
+ 
+σ2 + γ⊤ΣW γ −
+1
+1 + r
+(γ⊤ΣW ˜γ)2
+˜γ⊤ΣW ˜γ + (θ −˜θ)⊤ΣX(θ −˜θ) + ∥θ −˜θ∥2/Tr(Σ−1
+X )
+!
+Tr(Σ−1
+X ).
+39
+
+===== PAGE 40 =====
+For our recalibrated PPI estimator, using Theorem 1, again we can obtain that
+ΣXY−only −ΣRePPI =
+1
+1 + rCov(E[H−1
+θ⋆∇ℓθ⋆(X, Y )|X, ˆY ])
+=
+1
+1 + rCov(Σ−1
+X E[X(X⊤θ −Y )|X, X⊤˜θ + W ⊤˜γ])
+=
+1
+1 + rCov(Σ−1
+X E[X(W ⊤γ + ϵ)|X, W ⊤˜γ])
+=
+1
+1 + rCov(Σ−1
+X XE[W ⊤γ|W ⊤˜γ])
+=
+1
+1 + r
+(γ⊤ΣW ˜γ)2
+˜γ⊤ΣW ˜γ
+· Σ−1
+X ,
+where the last line uses the fact that (W ⊤γ, W ⊤˜γ) are bivariate Gaussian. This implies
+Tr(ΣRePPI) =
+
+σ2 + γ⊤ΣW γ −
+1
+1 + r
+(γ⊤ΣW ˜γ)2
+˜γ⊤ΣW ˜γ
+
+Tr(Σ−1
+X ).
+D.3
+Discrete Predictions
+of Proposition 3. Using Lemma 1 and Theorem 1, we know that for mean estimation,
+ΣXY−only = Var(Y ),
+ΣPPI = Var(Y −ˆY ) + rVar( ˆY ),
+ΣPPI++ = Var(Y ) −
+1
+1 + r
+Cov(Y, ˆY )2
+Var( ˆY )
+,
+ΣRePPI = Var(Y ) −
+1
+1 + rVar(E[Y |ˆY ]).
+Under the Gaussian mixture model,
+Var(Y ) = σ2 + Var(µZ) = σ2 + 1
+3
+3
+X
+i=1
+µ2
+i −
+ 
+1
+3
+3
+X
+i=1
+µi
+!2
+= σ2 + (µ1 −µ2)2 + (µ2 −µ3)2 + (µ3 −µ1)2
+9
+,
+Var( ˆY ) = Var(Z) = 2
+3,
+Cov(Y, ˆY ) = µ1 + 2µ2 + 3µ3
+3
+−2µ1 + µ2 + µ3
+3
+= µ3 −µ1
+3
+,
+Var(E[Y |ˆY ]) = Var(µZ) = (µ1 −µ2)2 + (µ2 −µ3)2 + (µ3 −µ1)2
+9
+.
+40
+
+===== PAGE 41 =====
+10
+1
+100
+101
+Variance Ratio 
+=
+2
+X/
+2
+W
+0.1
+0.2
+0.3
+0.4
+0.5
+0.6
+0.7
+Confidence Interval Length
+XY-only
+PPI
+PPI++
+RePPI
+10
+1
+100
+101
+Variance Ratio 
+=
+2
+X/
+2
+W
+0.5
+0.6
+0.7
+0.8
+0.9
+1.0
+Confidence Interval Coverage
+XY-only
+PPI
+PPI++
+RePPI
+Figure 4: Average length of confidence intervals (left) and coverage (right) in modality mismatch
+simulation. The horizontal axis represents the variance ratio ρ = σ2
+X/σ2
+W .
+Therefore, the asymptotic variances are
+ΣXY−only = σ2 + (µ1 −µ2)2 + (µ2 −µ3)2 + (µ3 −µ1)2
+9
+,
+ΣPPI = ΣXY−only + 2(1 + r)
+3
+−2(µ3 −µ1)
+3
+,
+ΣPPI++ = ΣXY−only −
+1
+1 + r
+(µ3 −µ1)2
+6
+,
+ΣRePPI = ΣXY−only −
+1
+1 + r
+(µ1 −µ2)2 + (µ2 −µ3)2 + (µ3 −µ1)2
+9
+.
+This in turn implies that ΣPPI++ −ΣRePPI =
+1
+1+r
+(2µ2−µ3−µ1)2
+18
+≥0.
+E
+Simulation studies
+E.1
+Simulation in Stylized models
+E.1.1
+Modality Mismatch
+We run a simple simulation to compare the asymptotic variances numerically.
+We choose d = 5,
+n = 1000, N = 9000, σ2 = 1, ΣX = σ2
+XId, ΣW = σ2
+W Id and σ2
+W + σ2
+X = 10. In each trial, we generate
+θ and γ randomly from the unit sphere Sd−1. We vary the variance ratio ρ = σ2
+X/σ2
+W ∈[10−1.5, 101.5].
+For each value of ρ and each of 1000 trials, we compute 95% confidence intervals for each method. We
+report the average interval lengths and coverage rates in Figure 4.
+From Figure 4 we find that, as expected, all methods achieve the desired coverage approximately
+and RePPI uniformly improves upon PPI and PPI++. As discussed above, the gain of RePPI over
+PPI++ is inverse U-shaped and maximized in the middle, when ρ = σ2
+X/σ2
+W is close to 1, in which
+case both X and W are informative in explaining Y .
+E.1.2
+Distribution Shift
+Again, we compare the estimators numerically using a stylized simulation study in Figure 5.
+We
+choose d = 5, n = 1000, N = 9000, σ2 = 1, ΣX = 10Id, ΣW = 10Id and fixed the shift on γ to be
+∥γ −˜γ∥= 1. In each trial, we generate θ, γ, and the shift direction
+θ−˜θ
+∥θ−˜θ∥, γ −˜γ randomly from the unit
+sphere Sd−1. As in Section 4.1, we report the average 95% confidence interval lengths and coverage
+rates for different values of ∥θ −˜θ∥over 1000 trials. As indicated by Proposition 2, the asymptotic
+41
+
+===== PAGE 42 =====
+0.00
+0.25
+0.50
+0.75
+1.00
+1.25
+1.50
+1.75
+2.00
+Distribution Shift ||
+||
+0.10
+0.15
+0.20
+0.25
+0.30
+Confidence Interval Length
+XY-only
+PPI
+PPI++
+RePPI
+0.00
+0.25
+0.50
+0.75
+1.00
+1.25
+1.50
+1.75
+2.00
+Distribution Shift ||
+||
+0.5
+0.6
+0.7
+0.8
+0.9
+1.0
+Confidence Interval Coverage
+XY-only
+PPI
+PPI++
+RePPI
+Figure 5: Average length of confidence intervals (left) and coverage (right) in distribution shift simu-
+lation. The horizontal axis represents the bias ∥θ −˜θ∥.
+variance of RePPI does not vary with the bias of ˜θ, and the PPI estimator is worse than the XY-only
+estimator as ∥γ −˜γ∥is large.
+E.1.3
+Discrete Predictions
+4
+2
+0
+2
+4
+3
+0.15
+0.20
+0.25
+0.30
+0.35
+Confidence Interval Length
+XY-only
+PPI
+PPI++
+RePPI
+4
+2
+0
+2
+4
+3
+0.5
+0.6
+0.7
+0.8
+0.9
+1.0
+Confidence Interval Coverage
+XY-only
+PPI
+PPI++
+RePPI
+Figure 6: Average length of confidence intervals (left) and coverage (right) in simulation with discrete
+predictions. The horizontal axis represents µ3.
+We evaluate the performance of the estimators via a stylized simulation study where µ1 = −2,
+µ2 = 0, σ2 = 1, and µ3 is varied. We set n = 1000, N = 9000, and repeat the simulation for 1000
+trials. The average 95% confidence interval length and coverage rates are reported in Figure 6. As
+suggested by Proposition 3, the efficiency gap is zero when µ3 −µ2 = µ2 −µ1 and increases as the
+means become more nonlinear in the predicted label.
+E.2
+Performance of RePPI under Different Parameters
+In this section, we provide additional simulation studies to compare the performance of RePPI and
+XY-only, PPI, and PPI++ under various choices of labeled data ratio, score fitting method, and target
+estimand.
+We will use the following data-generating processes. Let
+Z ∼N(0, I5),
+X = Z + ξ,
+A = Z + ν,
+where ξ, ν ∼N(0, I5) are independent of Z. The auxiliary prediction is generated from the nonlinear
+signal
+s(A) = A1 + sin(A2) + A3A4.
+42
+
+===== PAGE 43 =====
+The variable A should be interpreted as auxiliary information that is accessible to the prediction
+model but not directly used in the definition of the inferential target. The prediction ˆY is therefore
+informative, but deliberately not calibrated for the target score.
+We consider three nonlinear target specifications. For mean estimation, we set
+ˆY = s(A) + η,
+Y = 1 + ˆY + sin( ˆY ) + ε,
+where η, ε ∼N(0, 1), and the target is θ⋆= E(Y ). For linear regression, we set
+ˆY = s(A) + η,
+Y = X⊤γ + sin( ˆY ) + ˆY tanh(X2) + ε,
+γ = (1, −1, 1, 0, 0)⊤.
+The target is the first coordinate of the population least-squares projection of Y on X. For logistic
+regression, we set
+ˆY = σ{s(A)},
+and generate
+Y | X, A ∼Bernoulli
+h
+σ
+n
+X⊤β + (2 ˆY −1)X1 + (2 ˆY −1) tanh(X2)
+oi
+,
+β = (1, −1, 1, 0, 0)⊤,
+where σ(t) = 1/(1 + e−t). The target is the first coordinate of the population logistic projection.
+In each case, the population truth used to evaluate coverage is approximated using an independent
+Monte Carlo reference sample of size 200,000.
+We compare four estimators: the XY-only estimator, standard PPI, PPI++ with scalar power
+tuning, and RePPI. We report the average confidence interval length and empirical coverage. All
+confidence intervals are nominal 95% intervals, and each configuration is repeated over 100 Monte
+Carlo replications. We will use three types of models to learn the imputed score for RePPI, including
+linear model (Linear), random forest (RF), and neural network (NN).
+We first study the nonlinear linear-regression target while fixing N = 10,000 and varying n ∈
+{500, 1000, 1500, 2000, 2500, 3000}. Figure 7 reports the average confidence interval length and cov-
+erage as a function of the label ratio n/N. RePPI consistently has the shortest intervals over the
+full grid, and all methods have approximately the target level of coverage. The PPI++ method has
+no improvement compared to the XY-only method due to the nonlinear structure of the signal in ˆY ,
+which can be learned
+We next fix n = 2000 and N = 10,000 under the same nonlinear linear-regression target and
+compare three learners for estimating the RePPI imputed score: Linear, RF, and NN. The results
+are shown in Figure 8. The linear recalibration gives only a small improvement over PPI++ because
+the optimal score is nonlinear in (X, ˆY ). The flexible learners are more effective: the average interval
+length is 0.109 for the neural-network recalibration and 0.128 for the random-forest recalibration,
+compared with approximately 0.150 for the labeled-only estimator, PPI++, and linear recalibration.
+The empirical coverages all remain valid for different models.
+We then compare the methods across different estimands in mean estimation, linear regression, and
+logistic regression, again with n = 2000 and N = 10,000. Figure 9 reports average confidence interval
+length and coverage. RePPI improves over the labeled-only estimator in all three target specifications,
+and preserves the target coverage level.
+E.3
+Comparison with Other Methods
+In this section, we conduct an additional simulation study for linear regression to compare RePPI with
+a broader set of recently proposed prediction-assisted inference methods, including:
+• The post-prediction adaptive inference (PSPA) method of Miao et al. [2025].
+43
+
+===== PAGE 44 =====
+0.05
+0.10
+0.15
+0.20
+0.25
+0.30
+Label ratio n/N
+0.1
+0.2
+0.3
+0.4
+0.5
+Avg. interval length
+XY-only
+PPI
+PPI++
+RePPI RF
+0.05
+0.10
+0.15
+0.20
+0.25
+0.30
+Label ratio n/N
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+Coverage
+XY-only
+PPI
+PPI++
+RePPI RF
+Figure 7:
+Average confidence interval length and coverage for the nonlinear linear-regression target
+with fixed N = 10,000 and varying labeled sample size n.
+• The prediction de-correlated inference (PDC) method of Gan et al. [2024].
+• The CC estimator of Gronsbell et al. [2024].
+• The safe and efficient estimator of Xu et al. [2025].
+We consider a linear regression setting, where the target is defined as θ⋆= argminθ E{(Y −X⊤θ)2}.
+We generate the data through the following model: let X = (1, e
+X⊤)⊤, e
+X ∼N(0, I2), W ∼N(0, 1),
+and
+ˆY = W,
+Y = X⊤θ⋆+ W + W 2 −1 + ε,
+where the true parameter is set to be θ⋆= (1, 1, 1)⊤. For each replication, we generate n = 1000 labeled
+observations (Xi, Yi, ˆYi) and N = 5000 unlabeled observations (Xi, ˆYi). The prediction surrogate ˆY is
+informative but the optimal score s⋆(X, ˆY ) = E[X(X⊤θ⋆−Y )|X, ˆY ] = −X(ˆY + ˆY 2 −1) is nonlinear;
+therefore, recalibration is necessary to achieve efficiency.
+We conduct 500 replications in total to
+report the average 95% confidence interval and coverage for the regression coefficient of ˜X1 among all
+the methods mentioned above, and the XY-only and PPI++Angelopoulos et al. [2023b] methods as
+benchmarks. The experiment results are reported in Figure 10.
+From Figure 10, we find that our RePPI methods have the shortest confidence interval among
+all the methods. This is because Gronsbell et al. [2024], Gan et al. [2024], Miao et al. [2025] all use
+the original loss function, and therefore have suboptimal efficiency since the optimal imputed loss
+is nonlinear.
+Xu et al. [2025] achieves better efficiency since it uses a basis expansion method to
+approximate the optimal score. However, we find that among K = 8, 27, 64, the K = 27 achieves the
+best performance, and K = 64 is significantly worse than the XY-only estimator. This is because Xu
+et al. [2025] explicitly requires that the minimum eigenvalue of the covariance matrix of basis functions
+be bounded. But empirically, we observe that in K = 64, the condition number of the empirical
+covariance matrix for basis functions is very large, leading to poor numerical stability. Therefore,
+although theoretically Xu et al. [2025] can achieve the semiparametric efficiency, their computational
+strategy may perform badly due to the computational instability and approximation efficiency of basis
+expansion. Our RePPI method doesn’t restrict the model class used to estimate the optimal imputed
+score, and therefore can perform better in more general problems.
+44
+
+===== PAGE 45 =====
+XY-only
+PPI++
+RePPI Linear
+RePPI NN
+RePPI RF
+0.00
+0.02
+0.04
+0.06
+0.08
+0.10
+0.12
+0.14
+Avg. interval length
+XY-only
+PPI++
+RePPI Linear
+RePPI NN
+RePPI RF
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+Coverage
+Figure 8: Comparison of different learners for estimating the RePPI imputed score under the nonlinear
+linear-regression target with n = 2000 and N = 10,000.
+Table 5: Required number of labeled observations to achieve a given interval length in the US census
+experiment. The last column reports the label reduction of RePPI relative to PPI++. Here “NA”
+means that the target interval length is not reached within the labeled-sample-size range considered.
+Interval Length
+XY-only
+PPI
+PPI++
+RePPI
+Reduced Samples (%)
+0.0019
+NA
+18696
+15847
+11918
+24.79%
+0.0020
+NA
+16186
+14062
+10560
+24.90%
+0.0021
+NA
+14165
+12610
+9405
+25.41%
+0.0022
+24883
+12607
+11344
+8412
+25.84%
+0.0023
+22432
+11262
+10287
+7594
+26.18%
+F
+Additional Applications
+F.1
+US Census Data
+We consider the relationship between age and wage rates, measured by the coefficient of age in the
+regression of log-income on age based on US Census data, following Angelopoulos et al. [2023a,b].
+We fit a prediction model of log-income with XGBoost using 14 other covariates, including education,
+marital status, citizenship, and race, among others. To demonstrate the effect of distribution shift, we
+restrict the training data to contain only those individuals who have a college degree or above, but seek
+inference on the whole population. The data used for inference contains 377,575 observations in total;
+we vary the fraction of labeled instances from 2%-10% and treat the remaining instances as unlabeled.
+We use linear regression to fit the imputed loss. The length and coverage of the computed confidence
+intervals are shown in Figure 11, and the number of labels required to achieve a given interval length
+is shown in Table 5. We find that all methods achieve the desired coverage, and RePPI consistently
+outperforms the other methods under different ratios
+n
+N+n: it saves over 24% of the labels required to
+achieve the same interval length as PPI and PPI++.
+45
+
+===== PAGE 46 =====
+Mean
+Linear Reg.
+Logistic Reg.
+0.00
+0.05
+0.10
+0.15
+0.20
+0.25
+0.30
+0.35
+0.40
+Avg. interval length
+XY-only
+PPI
+PPI++
+RePPI RF
+Mean
+Linear Reg.
+Logistic Reg.
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+Coverage
+Figure 9:
+Comparison across target specifications. The left panel reports average confidence interval
+length, and the right panel reports empirical coverage.
+Table 6: Required number of labeled observations to achieve a given interval length in the politeness
+experiment. The last column reports the label reduction of RePPI relative to PPI++. Here “NA”
+means that the target interval length is not reached within the labeled-sample-size range considered.
+Interval Length
+XY-only
+PPI
+PPI++
+RePPI
+Reduced Samples (%)
+0.8
+NA
+NA
+1650
+1599
+3.09%
+0.9
+1604
+NA
+1289
+1211
+6.08%
+1.0
+1299
+1591
+1026
+960
+6.42%
+1.1
+1072
+1193
+843
+787
+6.60%
+1.2
+897
+954
+697
+656
+5.88%
+F.2
+Politeness of Online Requests
+We study the relationship between politeness and the linguistic device of hedging, following [Gligori´c
+et al., 2024].
+The dataset [Danescu-Niculescu-Mizil et al., 2013] contains texts from 5512 online
+requests posted on Stack Exchange and Wikipedia. For each request, the politeness score is obtained
+from an average score of 5 human evaluators on a scale of 1-25. The politeness prediction is obtained
+from OpenAI’s GPT-4o mini model by prompting it to rate the politeness of the given text on a
+scale of 1-25 as well. The parameter of interest is the regression coefficient obtained by regressing
+the politeness score on the binary indicator of hedging in the request. We again use linear regression
+to fit the imputed loss. The experimental results are shown in Figure 12 and Table 12. We again
+observe a uniform improvement of RePPI over the other methods. Intuitively, this is because the
+language model’s predictions are not well-calibrated to match the correct distribution of human scores.
+Therefore, the recalibration improves the estimation accuracy.
+G
+Extension
+In this section, we discuss several immediate extensions of our framework.
+46
+
+===== PAGE 47 =====
+0.00
+0.05
+0.10
+0.15
+0.20
+0.25
+0.30
+Avg 95% CI width for coefficient 1
+RePPI-RF
+Xu et al. efficient K=27
+Xu et al. efficient K=8
+Gronsbell et al. CC
+Gan et al. PDC
+Miao et al. PSPA
+PPI++
+Xu et al. safe
+XY only
+Xu et al. efficient K=64
+coverage=0.94
+coverage=0.96
+coverage=0.95
+coverage=0.95
+coverage=0.96
+coverage=0.95
+coverage=0.96
+coverage=0.95
+coverage=0.94
+coverage=0.93
+Figure 10: Comparison of our RePPI method with methods in Miao et al. [2025], Gan et al. [2024],
+Gronsbell et al. [2024], Xu et al. [2025]. We use a random forest model to fit the optimal score for
+RePPI. For Xu et al. [2025], we choose the basis function to be the tensor product of natural cubic
+splines as the authors suggested, and we choose the number of basis K = 8, 27, 64, which corresponds
+to 2, 3, 4 basis on each dimension. We repeat the experiments for 500 times and report the average
+confidence interval length and coverage.
+G.1
+Predicted Covariates
+While we focus on predicted outcomes, it is easy to adapt RePPI to additionally enable prediction
+models for covariates. Let X = (X1, X2), and suppose that the subset of covariates X2 is missing in
+the unlabeled data. Let ˆX2 = f(X1, W) where f is a prediction model for X2. Then, we can use an
+imputed loss that takes predictions of both X2 and Y as input, gθ(X1, ˆX2, ˆY ). Following Theorem 1,
+the optimal imputed loss satisfies
+∇gθ⋆(X1, ˆX2, ˆY ) = E[∇ℓθ⋆(X, Y ) | X1, ˆX2, ˆY ].
+Similarly as before, we can adapt RePPI by choosing gθ(X1, ˆX2, ˆY ) = θ⊤ˆ
+Mˆs(X1, ˆX2, ˆY ), where
+ˆs(X1, ˆX2, ˆY ) is an estimate of E[∇ℓθ⋆(X, Y ) | X1, ˆX2, ˆY ].
+More generally, there may be multiple missingness patterns. For instance, there could be four
+datasets {DdX1dY : dY , dX2 ∈{0, 1}} where Y (resp. X1) is missing iff dY = 0 (resp. dX2 = 0). We
+can then extend the class of PPI estimators to include all estimators of the form
+argmin
+θ
+1
+|D11|
+X
+i∈D11
+ℓθ(Xi, Yi) −
+
+
+1
+|D11|
+X
+i∈D11
+g(10)
+θ
+(Xi, ˆYi) −
+1
+|D10|
+X
+i∈D10
+g(10)
+θ
+(Xi, ˆYi)
+
+
+−
+
+
+1
+|D11|
+X
+i∈D11
+g(01)
+θ
+(Xi1, ˆXi2, Yi) −
+1
+|D01|
+X
+i∈D01
+g(01)
+θ
+(Xi1, ˆXi2, Yi)
+
+
+−
+
+
+1
+|D11|
+X
+i∈D11
+g(00)
+θ
+(Xi1, ˆXi2, ˆYi) −
+1
+|D00|
+X
+i∈D00
+g(00)
+θ
+(Xi1, ˆXi2, ˆYi)
+
+.
+47
+
+===== PAGE 48 =====
+0.090
+0.092
+0.094
+0.096
+0.098
+regression coefficient
+0.0500 0.0875 0.1250 0.1625 0.2000
+labeled ratio
+0.001
+0.002
+0.002
+0.003
+0.004
+interval width
+0.0500 0.0875 0.1250 0.1625 0.2000
+labeled ratio
+0.6
+0.7
+0.8
+0.9
+1.0
+coverage
+XY-only
+PPI
+PPI++
+RePPI
+Figure 11: US Census experiments. The left panel shows a representative 95% confidence interval,
+the middle panel shows average interval width, and the right panel shows empirical coverage. The
+horizontal axis represents the ratio of labeled data,
+n
+N+n.
+Note that the expectation of the above loss function is E[ℓθ(X, Y )]. Thus, under regularity condi-
+tions, the estimator is consistent and asymptotically normal. We leave the investigation of optimal
+(g(10)
+θ
+, g(01)
+θ
+, g(00)
+θ
+) for future research.
+G.2
+Distribution Shift
+In this paper, we mainly focus on the setting where the labeled and unlabeled data are i.i.d. sam-
+pled from the same distribution. Here, we consider generalization to the case where the labeled data
+{(Xi, ˆYi)}n
+i=1 comes from a distribution P and the unlabeled data {(Xi, ˆYi)}n+N
+i=n+1 comes from a dis-
+tribution Q, where PX, ˆY ̸= QX, ˆY . Here PX, ˆY , QX, ˆY are both marginal distributions on (X, ˆY ), since
+the label Y is not observed on the unlabeled dataset, and we denote the conditional distribution of
+Y given (X, ˆY ) as PY |X, ˆY . In particular, we assume that the target estimand is defined on the same
+distribution of the labeled dataset, i.e.,
+θ⋆= argmin
+θ∈Θ
+EPX, ˆY ×PY |X, ˆY [ℓθ(X, Y )].
+Under this setting, the distribution shift between the two datasets can be handled by reweighting the
+unlabeled data. Assume the Radon-Nikodym derivative w(x, ˆy) =
+dPX, ˆY
+dQX, ˆY (x, ˆy) is known, then we can
+modify the PPI estimator (7) as
+ˆθPPI
+g
+= argmin
+θ
+1
+n
+n
+X
+i=1
+ℓθ(Xi, Yi) −
+ 
+1
+n
+n
+X
+i=1
+gθ(Xi, ˆYi) −1
+N
+n+N
+X
+i=n+1
+w(Xi, ˆYi)gθ(Xi, ˆYi)
+!
+,
+0
+1
+2
+regression coefficient
+0.10
+0.15
+0.20
+0.25
+0.30
+labeled ratio
+0.784
+0.928
+1.098
+1.300
+1.539
+interval width
+0.10
+0.15
+0.20
+0.25
+0.30
+labeled ratio
+0.6
+0.7
+0.8
+0.9
+1.0
+coverage
+XY-only
+PPI
+PPI++
+RePPI
+Figure 12: Politeness experiments. The left panel shows a representative 95% confidence interval,
+the middle panel shows average interval width, and the right panel shows empirical coverage. The
+horizontal axis represents the ratio of labeled data,
+n
+N+n.
+48
+
+===== PAGE 49 =====
+and the results in Theorem 1 and Theorem 2 immediately applies under the same proof.
+In practice, the Radon–Nikodym derivative w(x, ˆy) is typically unknown and must be estimated
+from the labeled and unlabeled data. A natural implementation replaces w in the weighted unlabeled
+term by a plug-in estimate bw, and fits it with an additional fold in the cross-fitting procedure to keep
+independence. The difference in the objective function of using w and ˆw is
+1
+N
+n+N
+X
+i=n+1
+(w(Xi, ˆYi) −ˆw(Xi, ˆYi))gθ(Xi, ˆYi)
+Hence, the resulting estimator has the same first-order expansion as the known-w estimator if
+√n
+EQ
+h
+{ bw(X, ˆY ) −w(X, ˆY )}∇gθ⋆(X, ˆY )
+i = op(1),
+EQ[∥ˆw −w∥2] = op(1)
+A simple sufficient condition is
+∥bw −w∥L2(Q) = op(n−1/2)
+when ∇gθ⋆is square-integrable and uniformly bounded in L2(Q). However, this is generally impossible
+with usual parametric and nonparametric models. If the above moment condition is not satisfied, then
+the plug-in density-ratio error may lead to additional first-order bias and result in variance inflation.
+Since quantifying the error arising from plug-in density would depend on the specific model choice of
+model for ˆw, we leave a more thorough analysis for future research.
+G.3
+Finite-Sample Variance Comparison for Mean Estimation
+For mean estimation, the efficiency gain from recalibration can be understood exactly through a finite-
+sample control-variate calculation. Let θ⋆= E[Y ], and let h(ˆY ) be a recalibrated surrogate. Consider
+the class of PPI estimators (which includes XY-only, PPI, PPI++, and RePPI)
+bθ(a, h) = ¯YL −a{¯hL −¯hU},
+where
+¯YL = 1
+n
+n
+X
+i=1
+Yi,
+¯hL = 1
+n
+n
+X
+i=1
+h( ˆYi),
+¯hU = 1
+N
+n+N
+X
+i=n+1
+h( ˆYi).
+Writing
+σ2
+Y = Var(Y ),
+γh = Cov{Y, h( ˆY )},
+Γh = Var{h( ˆY )},
+we have
+Var{bθ(a, h)} = σ2
+Y
+n −2aγh
+n
++ a2Γh
+ 1
+n + 1
+N
+
+.
+Similar to the optimal tuning (13) in the general case, for a fixed h, the optimal coefficient is
+a⋆
+h =
+N
+n + N
+γh
+Γh
+,
+and the optimized variance is
+Var{bθ(a⋆
+h, h)} = σ2
+Y
+n
+
+1 −
+N
+n + N R2
+h
+
+,
+R2
+h =
+γ2
+h
+σ2
+Y Γh
+.
+The XY-only estimator corresponds to a = 0, with variance σ2
+Y /n. Standard PPI corresponds to
+h( ˆY ) = ˆY and a = 1. PPI++ keeps the raw prediction h(ˆY ) = ˆY but optimizes the coefficient a,
+giving
+Var(bθPPI++) = σ2
+Y
+n
+
+1 −
+N
+n + N R2
+ˆY
+
+,
+R2
+ˆY =
+Cov(Y, ˆY )2
+Var(Y ) Var( ˆY )
+.
+49
+
+===== PAGE 50 =====
+Furthermore, RePPI has the flexibility to first recalibrate the prediction and then applies the same
+optimal tuning, which corresponds to optimize both h and a. With the choice of the oracle function
+h( ˆY ) = E[Y | ˆY ] (same as the oracle score s⋆), the variance is optimized and the optimal value is
+Var(bθRePPI) = σ2
+Y
+n
+
+1 −
+N
+n + N R2
+h
+
+= σ2
+Y
+n
+ 
+1 −
+N
+n + N
+Var(E[Y |ˆY ])
+σ2
+Y
+!
+.
+Therefore, RePPI improves over PPI++ whenever the optimal recalibration h(ˆY ) = E[Y |ˆY ] is not a
+simple linear function aY . In this finite-sample mean-estimation setting,
+Var(bθRePPI) ≤Var(bθPPI++) ≤min{Var(bθPPI), Var(bθXY−only)}.
+And the gain of RePPI over PPI++ is
+σ2
+Y
+n
+N
+n + N
+ 
+Var(E[Y |ˆY ])
+σ2
+Y
+−
+Cov(Y, ˆY )2
+Var(Y ) Var( ˆY )
+!
+,
+which corresponds to the difference between the optimal projection of Y on ˆY in the class of linear
+functions and all measurable functions.
+50

@@ -1,0 +1,182 @@
+[
+  {
+    "name": "Motor-1 (Eye blinking)",
+    "file": "Motor-1 (Eye blinking).mp4",
+    "frames": [
+      "/Users/sloblucyra/Documents/CAD/frames/Motor-1 (Eye blinking)/frame_0.jpg",
+      "/Users/sloblucyra/Documents/CAD/frames/Motor-1 (Eye blinking)/frame_0.jpg",
+      "/Users/sloblucyra/Documents/CAD/frames/Motor-1 (Eye blinking)/frame_1.jpg"
+    ],
+    "duration": 15.53415
+  },
+  {
+    "name": "Motor-10 (Echokinesis)",
+    "file": "Motor-10 (Echokinesis).mp4",
+    "frames": [
+      "/Users/sloblucyra/Documents/CAD/frames/Motor-10 (Echokinesis)/frame_0.jpg",
+      "/Users/sloblucyra/Documents/CAD/frames/Motor-10 (Echokinesis)/frame_0.jpg",
+      "/Users/sloblucyra/Documents/CAD/frames/Motor-10 (Echokinesis)/frame_1.jpg"
+    ],
+    "duration": 30.121995
+  },
+  {
+    "name": "Motor-11 (Hurts self)",
+    "file": "Motor-11 (Hurts self).mp4",
+    "frames": [
+      "/Users/sloblucyra/Documents/CAD/frames/Motor-11 (Hurts self)/frame_0.jpg",
+      "/Users/sloblucyra/Documents/CAD/frames/Motor-11 (Hurts self)/frame_0.jpg",
+      "/Users/sloblucyra/Documents/CAD/frames/Motor-11 (Hurts self)/frame_1.jpg"
+    ],
+    "duration": 8.753991
+  },
+  {
+    "name": "Motor-2 (Other facial tics)",
+    "file": "Motor-2 (Other facial tics).mp4",
+    "frames": [
+      "/Users/sloblucyra/Documents/CAD/frames/Motor-2 (Other facial tics)/frame_0.jpg",
+      "/Users/sloblucyra/Documents/CAD/frames/Motor-2 (Other facial tics)/frame_0.jpg",
+      "/Users/sloblucyra/Documents/CAD/frames/Motor-2 (Other facial tics)/frame_1.jpg"
+    ],
+    "duration": 15.012993
+  },
+  {
+    "name": "Motor-3 (Head jerks)",
+    "file": "Motor-3 (Head jerks).mp4",
+    "frames": [
+      "/Users/sloblucyra/Documents/CAD/frames/Motor-3 (Head jerks)/frame_0.jpg",
+      "/Users/sloblucyra/Documents/CAD/frames/Motor-3 (Head jerks)/frame_0.jpg",
+      "/Users/sloblucyra/Documents/CAD/frames/Motor-3 (Head jerks)/frame_1.jpg"
+    ],
+    "duration": 3.018594
+  },
+  {
+    "name": "Motor-4 (Shoulder jerks)",
+    "file": "Motor-4 (Shoulder jerks).mp4",
+    "frames": [
+      "/Users/sloblucyra/Documents/CAD/frames/Motor-4 (Shoulder jerks)/frame_0.jpg",
+      "/Users/sloblucyra/Documents/CAD/frames/Motor-4 (Shoulder jerks)/frame_0.jpg",
+      "/Users/sloblucyra/Documents/CAD/frames/Motor-4 (Shoulder jerks)/frame_1.jpg"
+    ],
+    "duration": 11.367007
+  },
+  {
+    "name": "Motor-5 (Arm movements)",
+    "file": "Motor-5 (Arm movements).mp4",
+    "frames": [
+      "/Users/sloblucyra/Documents/CAD/frames/Motor-5 (Arm movements)/frame_0.jpg",
+      "/Users/sloblucyra/Documents/CAD/frames/Motor-5 (Arm movements)/frame_0.jpg",
+      "/Users/sloblucyra/Documents/CAD/frames/Motor-5 (Arm movements)/frame_1.jpg"
+    ],
+    "duration": 21.009002
+  },
+  {
+    "name": "Motor-6 (Stomach twitches)",
+    "file": "Motor-6 (Stomach twitches).mp4",
+    "frames": [
+      "/Users/sloblucyra/Documents/CAD/frames/Motor-6 (Stomach twitches)/frame_0.jpg",
+      "/Users/sloblucyra/Documents/CAD/frames/Motor-6 (Stomach twitches)/frame_0.jpg",
+      "/Users/sloblucyra/Documents/CAD/frames/Motor-6 (Stomach twitches)/frame_1.jpg"
+    ],
+    "duration": 95.047
+  },
+  {
+    "name": "Motor-7 (Leg movements)",
+    "file": "Motor-7 (Leg movements).mp4",
+    "frames": [
+      "/Users/sloblucyra/Documents/CAD/frames/Motor-7 (Leg movements)/frame_0.jpg",
+      "/Users/sloblucyra/Documents/CAD/frames/Motor-7 (Leg movements)/frame_0.jpg",
+      "/Users/sloblucyra/Documents/CAD/frames/Motor-7 (Leg movements)/frame_1.jpg"
+    ],
+    "duration": 7.012426
+  },
+  {
+    "name": "Motor-8 (Touching-tapping things)_1",
+    "file": "Motor-8 (Touching-tapping things)_1.mp4",
+    "frames": [
+      "/Users/sloblucyra/Documents/CAD/frames/Motor-8 (Touching-tapping things)_1/frame_0.jpg",
+      "/Users/sloblucyra/Documents/CAD/frames/Motor-8 (Touching-tapping things)_1/frame_0.jpg",
+      "/Users/sloblucyra/Documents/CAD/frames/Motor-8 (Touching-tapping things)_1/frame_1.jpg"
+    ],
+    "duration": 57.017007
+  },
+  {
+    "name": "Motor-8 (Touching-tapping things)_2",
+    "file": "Motor-8 (Touching-tapping things)_2.mp4",
+    "frames": [
+      "/Users/sloblucyra/Documents/CAD/frames/Motor-8 (Touching-tapping things)_2/frame_0.jpg",
+      "/Users/sloblucyra/Documents/CAD/frames/Motor-8 (Touching-tapping things)_2/frame_0.jpg",
+      "/Users/sloblucyra/Documents/CAD/frames/Motor-8 (Touching-tapping things)_2/frame_1.jpg"
+    ],
+    "duration": 5.01551
+  },
+  {
+    "name": "Vocal-1 (sniffing-coughing-throat clearing)",
+    "file": "Vocal-1 (sniffing-coughing-throat clearing).mp4",
+    "frames": [
+      "/Users/sloblucyra/Documents/CAD/frames/Vocal-1 (sniffing-coughing-throat clearing)/frame_0.jpg",
+      "/Users/sloblucyra/Documents/CAD/frames/Vocal-1 (sniffing-coughing-throat clearing)/frame_0.jpg",
+      "/Users/sloblucyra/Documents/CAD/frames/Vocal-1 (sniffing-coughing-throat clearing)/frame_1.jpg"
+    ],
+    "duration": 23.646009
+  },
+  {
+    "name": "Vocal-2 (snorting-grunting)_1",
+    "file": "Vocal-2 (snorting-grunting)_1.mp4",
+    "frames": [
+      "/Users/sloblucyra/Documents/CAD/frames/Vocal-2 (snorting-grunting)_1/frame_0.jpg",
+      "/Users/sloblucyra/Documents/CAD/frames/Vocal-2 (snorting-grunting)_1/frame_0.jpg",
+      "/Users/sloblucyra/Documents/CAD/frames/Vocal-2 (snorting-grunting)_1/frame_1.jpg"
+    ],
+    "duration": 67.393991
+  },
+  {
+    "name": "Vocal-2 (snorting-grunting)_2",
+    "file": "Vocal-2 (snorting-grunting)_2.mp4",
+    "frames": [
+      "/Users/sloblucyra/Documents/CAD/frames/Vocal-2 (snorting-grunting)_2/frame_0.jpg",
+      "/Users/sloblucyra/Documents/CAD/frames/Vocal-2 (snorting-grunting)_2/frame_0.jpg",
+      "/Users/sloblucyra/Documents/CAD/frames/Vocal-2 (snorting-grunting)_2/frame_1.jpg"
+    ],
+    "duration": 152.185011
+  },
+  {
+    "name": "Vocal-3 (Repeat own words-sentences)",
+    "file": "Vocal-3 (Repeat own words-sentences).mp4",
+    "frames": [
+      "/Users/sloblucyra/Documents/CAD/frames/Vocal-3 (Repeat own words-sentences)/frame_0.jpg",
+      "/Users/sloblucyra/Documents/CAD/frames/Vocal-3 (Repeat own words-sentences)/frame_0.jpg",
+      "/Users/sloblucyra/Documents/CAD/frames/Vocal-3 (Repeat own words-sentences)/frame_1.jpg"
+    ],
+    "duration": 47.113733
+  },
+  {
+    "name": "Vocal-4 (Repeat others speech)",
+    "file": "Vocal-4 (Repeat others speech).mp4",
+    "frames": [
+      "/Users/sloblucyra/Documents/CAD/frames/Vocal-4 (Repeat others speech)/frame_0.jpg",
+      "/Users/sloblucyra/Documents/CAD/frames/Vocal-4 (Repeat others speech)/frame_0.jpg",
+      "/Users/sloblucyra/Documents/CAD/frames/Vocal-4 (Repeat others speech)/frame_1.jpg"
+    ],
+    "duration": 6.625011
+  },
+  {
+    "name": "Vocal-5 (Coprolalia)",
+    "file": "Vocal-5 (Coprolalia).mp4",
+    "frames": [
+      "/Users/sloblucyra/Documents/CAD/frames/Vocal-5 (Coprolalia)/frame_0.jpg",
+      "/Users/sloblucyra/Documents/CAD/frames/Vocal-5 (Coprolalia)/frame_0.jpg",
+      "/Users/sloblucyra/Documents/CAD/frames/Vocal-5 (Coprolalia)/frame_1.jpg"
+    ],
+    "duration": 14.041992
+  },
+  {
+    "name": "Vocal-6 (Insults-racial slurs)",
+    "file": "Vocal-6 (Insults-racial slurs).mp4",
+    "frames": [
+      "/Users/sloblucyra/Documents/CAD/frames/Vocal-6 (Insults-racial slurs)/frame_0.jpg",
+      "/Users/sloblucyra/Documents/CAD/frames/Vocal-6 (Insults-racial slurs)/frame_0.jpg",
+      "/Users/sloblucyra/Documents/CAD/frames/Vocal-6 (Insults-racial slurs)/frame_1.jpg"
+    ],
+    "duration": 13.807007
+  }
+]

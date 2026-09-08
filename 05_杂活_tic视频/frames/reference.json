@@ -1,0 +1,92 @@
+[
+  [
+    "Motor-1 (Eye blinking)",
+    "Do your eyes blink a lot like this for no special reason (demonstrate)?",
+    "특별한 이유 없이 눈을 이렇게 자주 깜빡이는 경우가 있습니까? (시범 보임)"
+  ],
+  [
+    "Motor-2 (Other facial tics)",
+    "Do other parts of your face sometimes move unexpectedly like this (demonstrate) facial grimaces, nose scrunching, and opening mouth as if to yawn.",
+    "얼굴의 다른 부위가 때때로 이렇게 예상치 않게 움직이는 경우가 있습니까? (시범 보임) 예를 들어, 얼굴을 찡그리거나, 코를 찡그리거나, 하품하는 것처럼 입을 벌리는 경우 등이 있습니다."
+  ],
+  [
+    "Motor-3 (Head jerks)",
+    "Do you sometimes nod your head, shake your head, or turn your head to the side for no special reason (demonstrate)?",
+    "특별한 이유 없이 고개를 끄덕이거나, 좌우로 흔들거나, 옆으로 돌리는 경우가 있습니까? (시범 보임)"
+  ],
+  [
+    "Motor-4 (Shoulder jerks)",
+    "What about your shoulders, do your shoulders sometimes move unexpectedly like this (shrug shoulder or roll shoulder)?",
+    "어깨는 어떻습니까? 어깨가 때때로 이렇게 예상치 않게 움직이는 경우가 있습니까? (어깨를 으쓱하거나 돌리는 동작 시범)"
+  ],
+  [
+    "Motor-5 (Arm movements)",
+    "Do you sometimes flap your arms or throw your arms out as if to hit something that isn't there (demonstrate)?",
+    "때때로 팔을 퍼덕이거나, 실제로는 없는 것을 치려는 것처럼 팔을 휘두르는 경우가 있습니까? (시범 보임)"
+  ],
+  [
+    "Motor-6 (Stomach twitches)",
+    "Does your stomach sometimes move for no special reason?",
+    "특별한 이유 없이 배(복부)가 때때로 움직이는 경우가 있습니까?"
+  ],
+  [
+    "Motor-7 (Leg movements)",
+    "Do you ever stomp your feet or kick your legs out and you're not sure why you do it? Do you sometimes bang your legs up under your desk when you weren't planning on moving them?",
+    "특별한 이유 없이 발을 구르거나 다리를 차는 경우가 있습니까? 또는 의도하지 않았는데 책상 아래에서 다리를 부딪치거나 움직인 적이 있습니까?"
+  ],
+  [
+    "Motor-8 (Touching-tapping things)_1",
+    "Do you ever touch your own body, your nose, your ear, or feel like you have to touch other people, or other things…like having to touch the phone every time you walk by it, touch walls, or all the furniture in your room? Do you often tap your pencil or your fingers against your desk?",
+    "자신의 몸(코나 귀 등)을 만지거나, 다른 사람이나 물건을 만져야 할 것 같은 느낌이 들어 실제로 만지는 경우가 있습니까? 예를 들어, 지나갈 때마다 휴대전화를 터치해야 하거나, 벽이나 방 안의 가구들을 만지는 경우 등이 있습니다. 또는 연필이나 손가락으로 책상을 자주 두드리는 편입니까?"
+  ],
+  [
+    "Motor-8 (Touching-tapping things)_2",
+    "(same as above - second video example)",
+    "(row8, second video for Motor-8)"
+  ],
+  [
+    "Motor-10 (Echokinesis)",
+    "Do you ever find that you have to imitate other peoples actions like pushing your hair back or rubbing your nose? Anything else?",
+    "다른 사람이 하는 행동(예: 머리를 뒤로 넘기거나 코를 문지르는 행동 등)을 따라 해야 할 것 같은 경우가 있습니까? 또 다른 예가 있습니까?"
+  ],
+  [
+    "Motor-11 (Hurts self)",
+    "Do you ever feel like you have to hit yourself in the face, pull your hair or bite your hand?",
+    "자신의 얼굴을 때리거나, 머리카락을 잡아당기거나, 손을 물어야 할 것 같은 느낌이 드는 경우가 있습니까?"
+  ],
+  [
+    "Vocal-1 (sniffing-coughing-throat clearing)",
+    "Do you ever sniff, cough, or clear your throat when you don't have a cold? Does this happen over and over again?",
+    "감기에 걸리지 않았는데도 코를 킁킁거리거나, 기침을 하거나, 목을 가다듬는 경우가 있습니까? 이런 행동이 반복적으로 나타납니까?"
+  ],
+  [
+    "Vocal-2 (snorting-grunting)_1",
+    "Do you ever make noises through your nose or in your throat like this (demonstrate)?",
+    "코나 목을 통해 이렇게 소리를 내는 경우가 있습니까? (시범 보임)"
+  ],
+  [
+    "Vocal-2 (snorting-grunting)_2",
+    "(same as above - second video example)",
+    "(row15, second video for Vocal-2)"
+  ],
+  [
+    "Vocal-3 (Repeat own words-sentences)",
+    "Do you ever notice that you have to repeat yourself, not because someone didn't hear you, but because it didn't sound right, or maybe for no special reason at all?",
+    "누군가가 못 들었다거나 해서가 아니라, 소리가 마음에 안 들거나 특별한 이유 없이 자신이 한 말을 반복해야 한다고 느낀 적이 있습니까?"
+  ],
+  [
+    "Vocal-4 (Repeat others speech)",
+    "Do you find yourself sometimes repeating things other people have said for no special reason at all?",
+    "특별한 이유 없이 다른 사람이 한 말을 따라 반복하는 경우가 있습니까?"
+  ],
+  [
+    "Vocal-5 (Coprolalia)",
+    "Do bad words ever pop out of your mouth in the middle of a sentence for no reason, or do you find yourself saying bad things under your breathe and find you can't stop yourself?",
+    "특별한 이유 없이 문장 도중 욕이 튀어나오거나, 혼잣말처럼 욕을 하게 되고 멈출 수 없다고 느낀 적이 있습니까?"
+  ],
+  [
+    "Vocal-6 (Insults-racial slurs)",
+    "Do you sometimes find yourself saying bad things to people about how they look or something else about them when you didn't really meant it?",
+    "특별히 그런 의도가 없었는데, 다른 사람의 외모나 다른 점에 대해 나쁘게 말하게 되는 경우가 있습니까?"
+  ]
+]

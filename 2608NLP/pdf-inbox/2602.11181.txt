@@ -1,0 +1,1261 @@
+===== PAGE 1 =====
+Code-Mixing and Code-Switching for Text in the LLM Era:
+A Playbook of Models, Data, Evaluation, and Open Problems
+Himanshu Gupta 1
+Pratik Jayarao 2
+Neeraj Varshney 1
+Chaitanya Dwivedi 2
+1Arizona State University
+2Carnegie Mellon University
+{hgupta35,nvarshn2}@asu.edu
+{pjayarao,cdwivedi}@alumni.cmu.edu
+Abstract
+Code-mixing and code-switching (CSW) re-
+main challenging phenomena for large lan-
+guage models (LLMs).
+Despite recent ad-
+vances in multilingual modeling, LLMs of-
+ten struggle in mixed-language settings, ex-
+hibiting systematic degradation in grammat-
+icality, factuality, and safety behavior. This
+survey provides a comprehensive overview of
+CSW research in the era of LLMs. We in-
+troduce a unifying taxonomy that organizes
+prior work along dimensions of data, modeling,
+and evaluation, and we distill these findings
+into a practical playbook of actionable recom-
+mendations for building, adapting, and evalu-
+ating CSW-capable LLMs. We review mod-
+eling approaches ranging from CSW-tailored
+pre-training and task-specific post-training to
+prompting strategies and in-context learning.
+We analyze current evaluation practices, high-
+lighting sources of instability and limited repro-
+ducibility, and we catalog existing benchmarks
+while critically examining their linguistic cover-
+age and English-centric biases. Finally, we dis-
+cuss emerging safety concerns, including use
+of code-mixing as a mechanism for bypassing
+model safeguards, and identify open research
+challenges. 1
+1
+Introduction
+Code-mixing and code-switching (CSW) is the
+practice of alternating between two or more lan-
+guages within a conversation or a sentence, and it is
+a ubiquitous linguistic phenomenon in multilingual
+communities. While CSW is the norm for millions
+of users on social media and messaging platforms,
+it remains a formidable challenge for Natural Lan-
+guage Processing (NLP) systems trained primarily
+on monolingual corpora. The research landscape
+has shifted dramatically with the advent of Large
+Language Models (LLMs). Previous eras relied on
+1The work does not relate to authors’ position at Amazon
+Figure 1: A comprehensive framework for addressing
+code-mixing in the LLM era, spanning data, modeling,
+prompting, and evaluation to build more robust and safe
+multilingual systems.
+fragmented, task-specific approaches, from statis-
+tical models (HMMs) to specialized neural archi-
+tectures (RNNs) which required extensive feature
+engineering or fine-tuning for each language pair.
+The LLM era promises a unified solution: a sin-
+gle foundational model capable of handling diverse
+tasks. However, despite their scale, current LLMs
+frequently fail when confronted with the intricacies
+of mixed-language inputs. These failures manifest
+not only as performance degradation in standard
+tasks but also as “language confusion,” where mod-
+els unexpectedly revert to a dominant language like
+English, and “hallucination” of cultural nuances
+(Zhang et al., 2023a; Mohamed et al., 2025). Fur-
+thermore, CSW has emerged as a critical vector for
+AI safety. Recent red-teaming studies reveal that
+safety guardrails aligned on English data are brittle;
+malicious actors can effectively “jailbreak” models
+using code-mixed prompts that bypass semantic fil-
+ters (Yoo et al., 2024b). This creates an urgent need
+to understand how LLMs process mixed inputs and
+to develop robust adaptation strategies.
+This survey maps this evolving field through a
+methodological taxonomy. Unlike broader multilin-
+gual surveys (Sheth et al., 2025b), we focus specif-
+ically on the LLM lifecycle. While recent com-
+prehensive surveys provide broad taxonomies of
+arXiv:2602.11181v2  [cs.CL]  10 May 2026
+
+===== PAGE 2 =====
+the research landscape (Sheth et al., 2025b; Winata
+et al., 2023; Do˘gruöz et al., 2023a), our work dif-
+ferentiates itself by structuring findings as an op-
+erational playbook centered on the LLM lifecycle.
+We move beyond a literature-centric review to of-
+fer actionable, practitioner-focused recommenda-
+tions for data generation, prompting strategies, and
+safety alignment to effectively build and deploy
+code-mixed systems. We begin by auditing Data
+Resources (§2) for biases such as English centric-
+ity. We then analyze Modeling Strategies (§3–§5),
+contrasting the efficacy of prompting techniques
+against structural interventions like continued pre-
+training. Finally, we address the downstream im-
+plications: the instability of current Evaluation
+metrics (§6) and the imperative of Safety and Red-
+Teaming (§7).
+2
+Background: Linguistic Foundations
+and Computational Landscape
+In this section, we consolidate the core linguistic
+definitions, the typology of language interactions,
+and the broad landscape of NLP tasks associated
+with code-mixing.
+2.1
+Core Definitions
+We first define the key linguistic concepts utilized
+in the study of mixed-language data:
+Code-Switching vs.
+Code-Mixing: While of-
+ten used interchangeably, Code-Switching techni-
+cally refers to inter-sentential alternation (between
+sentences), whereas Code-Mixing denotes intra-
+sentential blending (within a clause).
+Matrix vs. Embedded Language: Derived from
+the Matrix Language Frame (MLF) theory, the Ma-
+trix Language provides the morphosyntactic frame
+(e.g., word order), while the Embedded Language
+contributes lexical items.
+Transliteration: The representation of text from
+one script in another (e.g., Hindi written in Latin
+script), a dominant feature of digital CSW. This in-
+troduces high orthographic variance, complicating
+subword tokenization.
+Grammatical
+Constraints:
+Intra-sentential
+switching is not arbitrary.
+It adheres to rules
+such as the Equivalence Constraint (switches
+occur where surface structures of both languages
+map onto each other) and the Free Morpheme
+Constraint (switches are prohibited between a root
+and a bound morpheme) (Poplack, 1980).
+2.2
+A Typology of Code-Mixing
+The CSW literature spans a spectrum from bilin-
+gual to multilingual settings. The majority of work
+remains English-centric, covering South Asian
+pairs (Hinglish, Tanglish) in Romanized scripts,
+European pairs (Spanish-English), and East Asian
+pairs mixing English with logographic systems. Be-
+yond bilingual mixing, recent studies explore tri-
+lingual environments (e.g., English-Bangla-Hindi),
+intra-family mixing (e.g., Spanish-Portuguese), di-
+alectal switching (e.g., MSA-Egyptian Arabic), and
+“hyper-mixed” synthetic scenarios for stress-testing
+model safety.
+CSW is not a single task but a pervasive condition
+affecting the entire NLP stack—from token-level
+language identification to generation and retrieval.
+A detailed landscape of affected tasks and applica-
+tions is provided in Appendix A.
+3
+Prompting and In-Context Learning
+With the rise of large language models (LLMs),
+prompting and in-context learning (ICL) have be-
+come the first line of defense for tackling linguistic
+tasks. In context of code-mixing, literature reveals
+a dual utility for prompting. First, code-mixed and
+transliterated prompts serve as powerful “cognitive
+bridges” to unlock better multilingual performance
+in low-resource scenarios. Second, when goal is
+to generate code-mixed text itself, specialized con-
+straints are required to prevent models from revert-
+ing to monolingual English. We synthesize these
+two distinct prompting paradigms below.
+3.1
+Code-Mix Prompting to Unlock
+Multilingual Capabilities
+A growing body of research suggests that code-
+mixing is not just a target task but a mechanism
+to improve an LLM’s general multilingual reason-
+ing and transfer capabilities, particularly for low-
+resource languages.
+Bridging Representations via In-Context Mix-
+ing.
+Research shows that mixing languages
+within few-shot exemplars aligns internal represen-
+tations for low-resource languages. Shankar et al.
+(2024) demonstrate In-Context Mixing (ICM),
+where replacing English content words with tar-
+get equivalents significantly improves downstream
+tasks like grammatical error correction by bridg-
+ing the semantic gap. Similarly, Zhu et al. (2025)
+propose Code-Switching In-Context Learning
+
+===== PAGE 3 =====
+(CSICL), using examples that progressively transi-
+tion from the target language to English. This acts
+as a cognitive ramp, reducing the model’s reliance
+on implicit internal translation and improving cross-
+lingual transfer.
+Overcoming Script Barriers via Transliteration.
+For languages using non-Latin scripts (e.g., Hindi,
+Bengali, Arabic), LLM tokenizers often fragment
+words into meaningless sub-tokens.
+Ma et al.
+(2024) identify transliteration as a potent strat-
+egy to overcome this. Converting non-Latin script
+examples into the Latin alphabet (Romanization)
+increases lexical overlap with the model’s English-
+centric vocabulary. Providing Romanized text in
+the prompt—or both native and Romanized scripts
+simultaneously—maximizes the semantic signal
+for sequence labeling and classification tasks.
+Activating Cultural Knowledge.
+Prompting
+strategy also dictates knowledge retrieval. Kim
+et al. (2024) find that the language of the prompt
+serves as a context trigger. Posing a question in a
+code-mixed format can “activate” specific cultural
+neurons and localized knowledge that remain dor-
+mant during English-only prompting. Thus, code-
+mixed priming is essential when the downstream
+task involves cultural reasoning or regional senti-
+ment.
+Practitioner’s Insight: The Multilingual Unlock
+• If the model struggles with a low-resource
+language: Do not use purely monolingual
+prompts. Inject target-language words into
+English few-shot examples (ICM) to bridge
+the semantic gap.
+• If the language uses a Non-Latin script:
+The tokenizer is likely your bottleneck.
+Transliterate the input to Latin script in
+the prompt to leverage the model’s English-
+centric pre-training.
+• If task requires cultural nuance: Use code-
+mixed queries to “wake up” region-specific
+parameters and reduce generic westernized
+hallucinations.
+3.2
+Prompting Strategies for Controlled
+Code-Mixed Generation
+When the objective shifts to generating code-mixed
+text (e.g., for chatbots or synthetic data), naive
+prompting often fails, leading to “unnatural” mix-
+ing or language reversion. Successful generation
+requires explicit constraints.
+Explicit Definitions over Role-Playing.
+Vague
+instructions like “act as a bilingual speaker” are
+often insufficient for maintaining a mixed output.
+Zhang et al. (2023b) show that including a formal
+definition of code-mixing in the system prompt
+yields significantly higher quality output than sim-
+ple role-playing prompts.
+Linguistic and Syntactic Constraints.
+To pre-
+vent random, unnatural switching, prompts must
+enforce structural rules. Kuwanto et al. (2024)
+demonstrate that injecting explicit linguistic con-
+straints (e.g., instructing the model to only switch
+at specific syntactic boundaries like Noun Phrases)
+drastically improves human-perceived naturalness.
+This approach leverages the LLM’s instruction-
+following capability to adhere to theoretical frame-
+works like the Equivalence Constraint.
+Rule-Based Construction for Data Synthesis.
+For creating evaluation benchmarks or stress-
+testing systems, organic generation can be too un-
+predictable. Gupta et al. (2024) suggest abandon-
+ing natural generation in favor of rigid, rule-based
+prompts (e.g., “Substitute every noun with its En-
+glish translation”). While stylistically rigid, this
+method guarantees the presence of code-mixing
+at specific densities, which is crucial for rigorous
+model evaluation.
+Practitioner’s Insight: The Prompting Playbook
+• For Assistants and Natural Interaction:
+Avoid vague persona prompts (“You are a
+bilingual speaker”), rather provide formal def-
+initions in the prompt.
+• To Prevent Unnatural Switching: Explic-
+itly enforce structural constraints in prompt
+(e.g., allow switches only at noun phrases or
+clause boundaries). This discourages token-
+level flickering and produces code-mixing that
+better matches linguistic patterns and human
+acceptability.
+Limitations
+Even optimized prompts often lag
+behind specialized fine-tuned models for structural
+tasks like Language Identification (LID) (Zhang
+et al., 2023a; Mohamed et al., 2025). Therefore,
+prompting should be viewed as a high-utility proto-
+typing tool, while production-grade systems often
+require architectural interventions discussed in §5.
+
+===== PAGE 4 =====
+4
+Strategies for Large-Scale Code-Mixed
+Data Generation
+The scarcity of naturally occurring, labeled code-
+mixed data has motivated a wide spectrum of gen-
+eration strategies. The most effective approaches
+balance three competing goals: (i) coverage across
+language pairs and domains, (ii) quality and nat-
+uralness of mixing patterns, and (iii) control over
+where, how often, and why switching occurs.
+Alignment-guided substitution (cheap scal-
+ing baseline).
+A compute-efficient baseline is
+Alignment-Guided Substitution, which uses
+word- or phrase-level alignments (e.g., GIZA++,
+FastAlign) to map spans across bilingual resources
+and swap selected tokens or phrases to induce
+switching. To prevent rigid phrasing or invalid
+boundaries common in naive swaps, practitioners
+enforce lightweight constraints (e.g., POS/NER re-
+strictions, aligned-phrase swapping) to preserve
+meaning and fluency.
+Generalizable zero-shot synthesis with multi-
+lingual backbones.
+When a multilingual pre-
+trained model is available, Generalizable Zero-
+Shot Synthesis enables rapid scale-up to new lan-
+guage pairs without curating large code-mixed cor-
+pora per pair.
+The GLOSS framework demon-
+strates that freezing the backbone and training
+only a lightweight parameter-efficient module (e.g.,
+adapters) can support synthesis that transfers to
+unseen language pairs (Hsu et al., 2023).
+Filter-then-finetune for high-fidelity scaling.
+A
+recurring failure mode in large synthetic corpora
+is “hallucinated” or unnatural mixing. The Filter-
+Then-Finetune pipeline generates a large pool
+and applies filtering—combining automatic checks
+(e.g., LID consistency, perplexity, toxicity removal)
+with task-aware heuristics—before training the fi-
+nal model. Sravani and Mamidi (2023) demonstrate
+that training on a smaller, quality-filtered “silver”
+subset significantly outperforms using the full syn-
+thetic corpus.
+Pseudo-parallel construction via monolingual-
+ization.
+Parallel Corpus Construction uses
+LLMs to convert code-mixed text into monolingual
+counterparts, creating pseudo-parallel pairs for su-
+pervised training (Heredia et al., 2025). This is
+particularly useful for objectives requiring aligned
+supervision (e.g., controlled switching or meaning
+preservation).
+Constrained prompting for controlled, valid
+switching.
+For applications requiring strict con-
+trollability, Linguistically Constrained Prompt-
+ing encodes theory-derived rules (e.g., allowable
+switch boundaries) directly into prompt. This en-
+sures syntactically valid switching and pedagogi-
+cal adherence while leveraging LLM fluency, as
+seen in frameworks like EZSwitch (Kuwanto et al.,
+2024).
+Rule-based prompting for targeted pattern di-
+versity.
+When the goal is to cover diverse mixing
+styles or to generate diagnostic patterns at scale,
+Rule-Based Prompting provides direct control
+(e.g., “switch only nouns”, “one switch per clause”,
+“switch only inside NPs”). This style is effective
+for generating balanced coverage over specific lin-
+guistic phenomena and for constructing challenge
+sets, as exemplified by approaches like Gupta et al.
+(2024).
+Practitioner’s Insight: The Data Generation
+Playbook
+• Quality Beats Quantity: Do not train on raw
+synthetic dumps. Follow the “Filter-Then-
+Finetune” protocol. A small, filtered “silver”
+dataset (screened for perplexity and switch
+density) outperforms a large, noisy one.
+• For Unseen Language Pairs: If you lack
+training data for a specific pair (e.g., Swahili-
+English), do not start from scratch.
+Use
+GLOSS-style adapters on a frozen multilin-
+gual backbone to transfer synthesis capabili-
+ties from high-resource pairs.
+• Creating Supervised Signals: If your down-
+stream task requires parallel supervision (e.g.,
+translation), use LLMs to “monolingualize”
+code-mixed text. This Pseudo-Parallel Con-
+struction creates the necessary aligned pairs
+that nature rarely provides.
+• For Reliability and Diagnostics: If generat-
+ing data for or stress-testing, rely on Con-
+strained Prompting.
+Use linguistic con-
+straints (e.g., EZSwitch) or rule-based substi-
+tution to guarantee validity of switch points,
+rather than relying on the model’s “vibe”.
+• The Cost-Effective Baseline: If compute is
+the bottleneck, revert to Alignment-Guided
+Substitution. It is cheap and fast, but apply
+
+===== PAGE 5 =====
+POS/NER constraints to prevent the output
+from becoming grammatically broken.
+5
+Training and Modeling Strategies
+Effectively handling code-mixed language requires
+strategies across the full model lifecycle, from
+foundational pre-training to post-training adap-
+tation. Prior work shows that explicit exposure to
+code-mixing is essential: models trained with code-
+mixed objectives can outperform much larger mod-
+els that lack such exposure (Zhang et al., 2023a).
+We organize the literature into pre-training methods
+that inject code-mix awareness, and post-training
+methods that align and specialize the model for
+downstream use.
+5.1
+Pre-training: Building Code-Mix-Aware
+LLMs
+Pre-training methods aim to bake code-mixing
+competence into the model so that language switch-
+ing is handled as a first-class phenomenon rather
+than noise.
+Objective design for code-mixing
+A common
+approach is to modify Masked Language Model-
+ing (MLM) to emphasize the structured regions
+of code-mixed text. Boundary-aware objectives
+such as SWITCHMLM mask tokens around lan-
+guage switch points, while weakly supervised vari-
+ants like FREQMLM use dictionary-based signals
+when gold labels are unavailable (Das et al., 2023).
+Other formulations add code-mix auxiliary tasks
+(e.g., switch-point prediction, bilingual generation)
+(Baral et al., 2025) or cast learning as denoising,
+reconstructing monolingual text from synthetically
+code-mixed noise (Iyer et al., 2023).
+Architectures for preserving switch cues
+Ar-
+chitectural modifications can help preserve switch
+information that standard Transformers tend to
+smooth out. RESBERT adds residual shortcuts
+from intermediate layers to the MLM head to re-
+tain boundary information (Das et al., 2023), while
+CMLFormer explicitly models matrix and embed-
+ded language interaction via a shared encoder and
+synchronized decoders (Baral et al., 2025).
+Leveraging code-mix / switch in LLM pre-
+training to improve multilingual performance
+CSCL uses a staged curriculum (token-level →
+sentence-level →monolingual consolidation) to
+improve transfer and reduce forgetting (Yoo et al.,
+2024a). In resource-constrained settings, contin-
+ued pre-training on smaller models remains a
+strong baseline (Goswami et al., 2023).
+Practitioner’s Insight: The Pre-Training Proto-
+col
+• Don’t Mask Randomly: Standard MLM is
+inefficient for code-mixing. Use Boundary-
+Aware Masking (e.g., SWITCHMLM) to fo-
+cus model’s gradient updates on the switch-
+points, where grammatical complexity lies.
+• Preserve the Signal: Deep transformers tend
+to “smooth out” the distinction between lan-
+guages. If training smaller BERT-style mod-
+els, add Residual Connections (RESBERT)
+to keep language-id signals available at the
+output layer.
+• Order Matters (Curriculum): Do not dump
+all code-mixed data at once. Follow a Staged
+Curriculum (CSCL): start with token-level
+mixing to learn vocabulary alignment, then
+move to sentence-level switching to learn syn-
+tax, and finish with monolingual consolidation
+to prevent catastrophic forgetting and benefit
+the overall multilingual capabilities of the sys-
+tem.
+5.2
+Post-training: Specializing, Aligning, and
+Controlling Behavior
+Post-training methods start from a general base
+model and adapt it to downstream tasks, deploy-
+ment objectives, and desired code-mixing behavior.
+Supervised and instruction tuning
+Supervised
+fine-tuning (SFT) on labeled or pseudo-parallel
+data is the standard approach for task specialization,
+including conditional generation such as mono-
+lingual →code-mixed translation (Heredia et al.,
+2025). For parameter-efficient specialization, PRO-
+CS utilizes instance-based prompt composition to
+combine task and language knowledge, achieving
+performance on par with full fine-tuning using only
+0.18% of total parameters (Bansal et al., 2022). In-
+struction tuning improves controllability; COM-
+MIT keeps instruction templates in English while
+code-mixing content fields, preserving instruction
+clarity while exposing model to mixed inputs (Lee
+et al., 2024).
+Preference alignment, personalization, and
+cross-lingual transfer
+Beyond SFT, RLAIF
+
+===== PAGE 6 =====
+aligns outputs with human preferences via reward
+modeling and RL, optimizing directly for perceived
+quality (Zhang et al., 2025). Fine-tuning can also
+target stylistic control: PARADOX conditions gen-
+eration on a learned user persona to match indi-
+vidual mixing styles (Sengupta et al., 2023). For
+transferring domain competence across languages,
+MIGRATE leverages code-switching data to adapt
+domain-specific English models efficiently (Hong
+et al., 2025), and synthetic code-switched tuning
+can improve low-resource performance without
+degrading high-resource languages (Nagar et al.,
+2025).
+Representations and structure for downstream
+robustness
+Post-training also includes tech-
+niques that shape representations for reliable down-
+stream use.
+Contrastive learning objectives
+such as ConCSE align code-mixed sentences with
+monolingual equivalents to produce semantically
+stable embeddings (Jeon et al., 2024).
+For re-
+trieval settings, ContrastiveMix decouples lan-
+guage alignment from relevance training to pre-
+serve ranking signals in IR/RAG (Do et al., 2024).
+For structure-sensitive tasks, explicit syntax can be
+incorporated via code-mixed UD forests, which
+merge parses from both languages into a unified
+graph to reduce single-parser transfer bias in rela-
+tion extraction (Fei et al., 2023).
+Practitioner’s Insight: The Adaptation Play-
+book
+• Instruction Tuning Design: Do not code-
+mix the instructions themselves. Follow the
+COMMIT strategy: keep the task template
+(instruction) in a high-resource language (like
+English) and only code-mix the input/output
+content. This prevents the model from misun-
+derstanding the task definition.
+• Efficiency via Soft Prompts: Use Prompt
+Composition (PRO-CS) to fuse language and
+task embeddings. This achieves parity with
+full fine-tuning using less than 1% of the pa-
+rameters, essential for deploying multiple lan-
+guage pairs.
+• Quality requires Alignment, not just SFT:
+SFT teaches the model how to mix, but not
+what is good.
+To fix “unnatural” mixing,
+you must use RLAIF (Reinforcement Learn-
+ing with AI Feedback) or reward modeling to
+align the model with preference scores rather
+than just next-token prediction.
+• Personalization: Use Persona-Aware Gen-
+eration (PARADOX) by conditioning the gen-
+eration on a user-specific embedding or style
+profile.
+• Fixing Retrieval (RAG): Standard mul-
+tilingual embeddings often fail to match
+code-mixed queries to monolingual docu-
+ments. Use Contrastive Decoupling (Con-
+trastiveMix) to separate “language alignment”
+loss from “relevance” loss, ensuring the ranker
+doesn’t get confused by language shifts.
+For a detailed discussion of embedding methods
+for code-mixed language—including contrastive
+alignment (ConCSE, ContrastiveMix), switch-
+aware architectures (CMLFormer, RESBERT), and
+structure-informed embeddings (UD Forests)—see
+Appendix C.
+6
+Evaluation: From Overlap Metrics to
+Capability Probes
+Evaluation in the LLM era has shifted from surface-
+level overlap (does the output match a reference?)
+to capability assessment (does the model preserve
+meaning, follow mixing constraints, and remain
+useful?). This shift is driven by a persistent met-
+ric gap: conventional n-gram metrics (BLEU,
+ROUGE) are insensitive to code-mixing patholo-
+gies such as language reversion (collapsing to
+English) or uncontrolled switching (Zhang et al.,
+2023a). Current best practices therefore decouple
+the measurement of structural mixing from seman-
+tic quality, organizing benchmarks by the specific
+reasoning capabilities they stress-test.
+6.1
+Measuring Quality: A Hybrid Assessment
+Strategy
+Evaluating code-mixed text requires more than
+standard overlap metrics, since there are many valid
+bilingual realizations and metrics like BLEU can
+over-reward monolingual copying. A practical eval-
+uation setup therefore combines two complemen-
+tary views: structural instrumentation to verify that
+mixing is actually happening, and semantic judg-
+ment to ensure the output remains faithful, natural,
+and useful.
+Structural Indices as Instrumentation.
+Struc-
+tural metrics help diagnose failure modes that over-
+lap metrics miss, especially when models silently
+
+===== PAGE 7 =====
+revert to a single language. The Code Mixing In-
+dex (CMI) (Aguilar et al., 2020) measures how
+much mixing occurs, making it a useful first check
+for low-effort outputs or language collapse. How-
+ever, volume alone is insufficient because unnatural
+mixing can still score well. The I-Index (Switch-
+ing Ratio) captures switching frequency (Srivas-
+tava and Singh, 2021), helping distinguish coherent
+span-level switching from pathological token-level
+flickering (Deng et al., 2025). Complementary mea-
+sures such as the M-Index further help separate
+meaningful bilingual mixing from shallow lexical
+borrowing.
+Human-Centric and AI Judges.
+For semantic
+faithfulness and naturalness, reference-free evalua-
+tion is often more reliable than n-gram matching.
+Likert-scale acceptability remains the most direct
+way to assess whether generations align with bilin-
+gual community norms (Kodali et al., 2024), while
+pairwise preference comparisons tend to be more
+stable when selecting between competing prompt-
+ing or training strategies (Heredia et al., 2025). To
+scale human insights, LLM-as-a-Judge protocols
+are increasingly used (Zhang et al., 2025), but they
+must be calibrated against bilingual human ratings
+to avoid bias toward fluent monolingual outputs.
+Practitioner’s Insight: The Metric Selection
+Playbook
+• Treat structure and meaning as separate
+checks: Use overlap metrics for rough flu-
+ency, but always pair them with structural in-
+dices to confirm real code-mixing rather than
+monolingual copying.
+• Prefer human-aligned judgments for gener-
+ation: For open-ended generation, pairwise
+preference and Likert scoring reflect per-
+ceived naturalness and faithfulness more reli-
+ably than exact match metrics.
+• Calibrate LLM judges before trusting
+them: Validate judge scores on a small bilin-
+gual human-labeled subset, and track judge
+disagreement with humans as a first-class
+quality signal.
+A detailed comparison of evaluation method fami-
+lies is provided in Appendix B.
+6.2
+Benchmarking: Selecting the Right
+Testbed
+Early datasets focused on shallow tagging; modern
+evaluation should probe reasoning, generalization,
+and knowledge activation.
+Foundational Syntax and Understanding.
+For
+baseline linguistic competence, LinCE (Aguilar
+et al., 2020) and GLUECoS (Khanuja et al., 2020)
+provide standardized splits for Language ID, POS
+tagging, and NLI. Recent large-scale resources like
+COMI-LINGUA (Sheth et al., 2025a) extend this
+to multi-task settings. However, high accuracy on
+these benchmarks can be deceptive; models often
+take “monolingual shortcuts” by translating inter-
+nally or ignoring the mixed context entirely.
+Reasoning, Knowledge, and Generation.
+To
+quantify “Code-Mixing Gap” in complex tasks,
+suites like CodeMixEval (Yang and Chai, 2025)
+and Lost in the Mix (Mohamed et al., 2025) isolate
+specific reasoning degradation caused by switching
+languages. In retrieval, benchmarks like ENKOQA
+test whether code-mixed queries “activate” cul-
+tural knowledge better than English equivalents
+(Kim et al., 2024). For summarization, CS-Sum re-
+veals high automatic scores mask subtle, meaning-
+altering errors, necessitating fine-grained error tax-
+onomies (Suresh et al., 2025).
+Diagnostic Probes.
+Advanced evaluation targets
+specific linguistic failures. Minimal-pair evalua-
+tion determines if models respect grammatical con-
+straints (e.g., prohibiting switches within bound
+morphemes) (Sterner and Teufel, 2025).
+Syn-
+thetic NLI probes measure the stability of logical
+alignment across language boundaries (Khandel-
+wal et al., 2025), while other diagnostics target
+low-resource transfer efficacy (Parra, 2023).
+Practitioner’s Insight: Benchmarking Playbook
+• Build a three tier eval suite: (1) compe-
+tence checks (LinCE, GLUECoS), (2) end
+task gap measurement (CodeMixEval, Lost
+in the Mix, ENKOQA, CS-Sum), and (3) di-
+agnostics (Minimal Pairs, NLI probes). This
+prevents overfitting to shallow benchmarks.
+• Report the Code Mixing Gap explicitly: Al-
+ways compare performance on code-mixed
+inputs versus matched monolingual inputs
+(same intent, same entities). The gap is of-
+ten more informative than absolute scores.
+
+===== PAGE 8 =====
+• Stratify by mixing difficulty: Slice results by
+switch rate, script type (native vs romanized),
+and switch location (token boundary vs intra
+word). Aggregated numbers hide systematic
+failures.
+7
+Safety, Bias, and Red-Teaming in
+Code-Mixed Contexts
+The fluid complexity of code-mixing presents
+unique challenges to model safety, often rendering
+guardrails trained on monolingual, high-resource
+data ineffective. This section examines how code-
+switching (CSW) serves as an adversarial attack
+vector and highlights the systemic biases inherent
+in current data practices.
+7.1
+Code-Switching as an Attack Vector
+Research consistently demonstrates that intra-
+sentence code-switching is a potent method for
+circumventing safety filters. The Code-Switching
+Red-Teaming (CSRT) framework reveals that
+LLMs frequently comply with harmful requests
+in code-mixed formats that they would refuse in
+English, with Attack Success Rate (ASR) increas-
+ing as more languages—particularly low-resource
+ones—are interleaved (Yoo et al., 2024b). This
+vulnerability stems from lexical dilution weaken-
+ing keyword defenses. Attack efficacy is amplified
+by automated toxicity generators (Wadgaonkar and
+Ratha, 2025) and phonetic perturbation (e.g., “Haet
+Bhasha”), which masks toxic intent via noisy ro-
+manization to bypass filters (Aswal and Jaiswal,
+2025). Mitigating them requires moving beyond
+English-only safety alignment to implement dy-
+namic, CSW-aware guardrails and explicitly in-
+cluding code-mixed adversarial examples in safety
+training.
+7.2
+Bias, Representativeness, and Future
+Scopes
+Beyond security, ethical concerns arise from the
+data pipelines themselves. Do˘gruöz et al. (2023b)
+argue that the lack of diversity in data collection
+and annotation teams introduces systematic blind
+spots regarding dialects and socio-demographics.
+To mitigate downstream harms, they advocate for
+transparent documentation and checklists to ensure
+representativeness across geographical and social
+registers.
+8
+Future Research: Grand Challenges
+We highlight four grand challenges that shape the
+next stage of CSW research.
+Challenge 1: Breaking the English-Centric Data
+Barrier.
+CSW pipelines remain skewed toward
+English-paired mixing (Do˘gruöz et al., 2023a;
+Sterner, 2024). Scaling beyond coverage into repre-
+sentativeness—reflecting dialectal variation, socio-
+demographic diversity, and realistic usage—is es-
+sential (Do˘gruöz et al., 2023b).
+Challenge
+2:
+Reforming
+the
+Evaluation
+Paradigm.
+Current metrics often reward lan-
+guage reversion and miss meaning drift under
+switching (Heredia et al., 2025). Progress requires
+reproducible protocols that jointly assess structural
+validity and semantic faithfulness across mixing
+regimes, with LLM judges calibrated against bilin-
+gual human acceptability (Kuwanto et al., 2024;
+Kodali et al., 2024).
+Challenge 3: RL, Reasoning, and Long-Context
+Modeling.
+Reinforcement learning remains un-
+derexplored for CSW-specific objectives (faithful-
+ness, naturalness, controllable switching). Long-
+context CSW is poorly understood, especially for
+multi-turn consistency and grounded reasoning.
+Mixed-language reasoning traces arise naturally
+in LLMs and may improve reasoning; future RL
+objectives could leverage these traces rather than
+suppressing them.
+Challenge 4: Dynamic Safety Under Mixed In-
+puts.
+Code-mixing bypasses English-centric safe-
+guards through lexical dilution (Aswal and Jaiswal,
+2025). Developing mix-aware guardrails requires
+adversarial evaluation reflecting realistic attacks
+and mechanistic interpretability to identify where
+mixed representations cause safety failures (Nie
+et al., 2025; Baral et al., 2025).
+9
+Conclusion
+This survey provides a comprehensive overview
+of CSW challenges in the LLM era. Our analy-
+sis shows that effective CSW modeling demands
+explicit interventions: CSW-aware pre-training,
+post-training adaptations, and mechanistic control.
+Standard automatic metrics are unreliable; the field
+must shift toward human-centered evaluation. We
+propose a roadmap requiring community efforts
+to expand data diversity, reform evaluation, and
+develop CSW-aware safety alignments.
+
+===== PAGE 9 =====
+Limitations
+This survey focuses on the LLM lifecycle for code-
+mixing and code-switching and therefore does not
+exhaustively cover pre-LLM statistical and neural
+approaches, speech-only settings, or non-textual
+modalities. Our coverage of language pairs reflects
+the English-centric bias of the literature we review,
+and we highlight this as an open problem rather
+than claiming full typological coverage. Finally, as
+a survey, we do not introduce new empirical results;
+conclusions about relative effectiveness of methods
+inherit the limitations of the underlying studies.
+References
+Gustavo Aguilar, Sudipta Kar, and Thamar Solorio.
+2020. Lince: A centralized benchmark for linguis-
+tic code-switching evaluation. In Proceedings of the
+Twelfth Language Resources and Evaluation Confer-
+ence (LREC), pages 1803–1813, Marseille, France.
+European Language Resources Association.
+Darpan Aswal and Siddharth D Jaiswal. 2025. "haet
+bhasha aur diskrimineshun": Phonetic perturbations
+in code-mixed hinglish to red-team llms. Preprint,
+arXiv:2505.14226.
+Srijan Bansal, Suraj Tripathi, Sumit Agarwal, Teruko
+Mitamura, and Eric Nyberg. 2022. PRO-CS : An
+instance-based prompt composition technique for
+code-switched tasks. In Proceedings of the 2022 Con-
+ference on Empirical Methods in Natural Language
+Processing, pages 10243–10255, Abu Dhabi, United
+Arab Emirates. Association for Computational Lin-
+guistics.
+Aditeya Baral, Allen George Ajith, Roshan Nayak,
+and Mrityunjay Abhijeet Bhanja. 2025. Cmlformer:
+A dual decoder transformer with switching point
+learning for code-mixed language modeling. ArXiv,
+abs/2505.12587.
+Richeek Das, Sahasra Ranjan, Shreyaan Pathak, and
+P. Jyothi. 2023. Improving pretraining techniques
+for code-switched nlp. In Annual Meeting of the
+Association for Computational Linguistics.
+Boyi Deng, Yunyang Wan, Baosong Yang, Fei Huang,
+Wenjie Wang, and Fuli Feng. 2025.
+Sparse
+autoencoder-guided supervised finetuning to mitigate
+unexpected code-switching in llms. In unknown.
+Junggeun Do, Jaeseong Lee, and Seung-won Hwang.
+2024. ContrastiveMix: Overcoming code-mixing
+dilemma in cross-lingual transfer for information re-
+trieval. In Proceedings of the 2024 Conference of
+the North American Chapter of the Association for
+Computational Linguistics: Human Language Tech-
+nologies (Volume 2: Short Papers), pages 197–204,
+Mexico City, Mexico. Association for Computational
+Linguistics.
+A. Seza Do˘gruöz, Sunayana Sitaram, Barbara E. Bul-
+lock, and Almeida Jacqueline Toribio. 2023a. A sur-
+vey of code-switching: Linguistic and social perspec-
+tives for language technologies. In Annual Meeting
+of the Association for Computational Linguistics.
+A. Seza Do˘gruöz, Sunayana Sitaram, and Zheng-Xin
+Yong. 2023b. Representativeness as a forgotten les-
+son for multilingual and code-switched data collec-
+tion and preparation. In Conference on Empirical
+Methods in Natural Language Processing.
+Hao Fei, Meishan Zhang, M. Zhang, and Tat seng Chua.
+2023.
+Constructing code-mixed universal depen-
+dency forest for unbiased cross-lingual relation ex-
+traction. ArXiv, abs/2305.12258.
+Dhiman Goswami, Antara Mahmud, and Md. Nishat
+Raihan. 2023. Mixed-distil-bert: Code-mixed lan-
+guage modeling for bangla, english, and hindi. ArXiv,
+abs/2309.10272.
+Ayushman Gupta, Akhil Bhogal, and Kripabandhu
+Ghosh. 2024. Code-mixer ya nahi: Novel approaches
+to measuring multilingual llms’ code-mixing capabil-
+ities. ArXiv, abs/2410.11079.
+Maite Heredia, Gorka Labaka, Jeremy Barnes, and
+A. Soroa. 2025. Conditioning llms to generate code-
+switched text: A methodology grounded in naturally
+occurring data. ArXiv, abs/2502.12924.
+Seongtae Hong, Seungyoon Lee, Hyeonseok Moon,
+and Heuiseok Lim. 2025. Migrate: Cross-lingual
+adaptation of domain-specific LLMs through code-
+switching and embedding transfer. In Proceedings of
+the 31st International Conference on Computational
+Linguistics, pages 9184–9193, Abu Dhabi, UAE. As-
+sociation for Computational Linguistics.
+I-Hung Hsu, Avik Ray, Shubham Garg, Nanyun Peng,
+and Jing Huang. 2023. Code-switched text synthesis
+in unseen language pairs. In Findings of the Asso-
+ciation for Computational Linguistics: ACL 2023,
+pages 5137–5151, Toronto, Canada. Association for
+Computational Linguistics.
+Vivek Iyer, Arturo Oncevay, and Alexandra Birch. 2023.
+Exploring enhanced code-switched noising for pre-
+training in neural machine translation. In Findings.
+Jangyeong Jeon, Sangyeon Cho, Minuk Ma, and Juny-
+oung Kim. 2024. Concse: Unified contrastive learn-
+ing and augmentation for code-switched embeddings.
+ArXiv, abs/2409.00120.
+Aarzoo Khandelwal, Junfan Chen, Zhenrong Zhang,
+Ravi Kiran Tallamraju, Dhruvesh Patel, Siddhesh
+Khandelwal, Prasanna Parthasarathi, and Julian
+McAuley. 2025. Evaluating multilingual and code-
+switched alignment in llms via synthetic natural lan-
+guage inference. Preprint, arXiv:2508.14735.
+Simran Khanuja, Sandipan Dandapat, Anirudh Srini-
+vasan, Sunayana Sitaram, and Monojit Choudhury.
+2020.
+GLUECoS: An evaluation benchmark for
+
+===== PAGE 10 =====
+code-switched NLP. In Proceedings of 58th Annual
+Meeting of Association for Computational Linguis-
+tics, pages 3575–3585, Online. Association for Com-
+putational Linguistics.
+Seoyeon Kim, Huiseo Kim, Chanjun Park, Jinyoung
+Yeo, and Dongha Lee. 2024. Can code-switched
+texts activate a knowledge switch in llms? a case
+study on english-korean code-switching.
+ArXiv,
+abs/2410.18436.
+Prashant Kodali, Anmol Goel, Likhith Asapu, Vamshi
+Bonagiri, Anirudh Govil, Monojit Choudhury, Man-
+ish Shrivastava, and P. Kumaraguru. 2024. From
+human judgements to predictive models: Unravel-
+ling acceptability in code-mixed sentences. ArXiv,
+abs/2405.05572.
+Garry Kuwanto, Chaitanya Agarwal, Genta Indra
+Winata, and Derry Tanti Wijaya. 2024.
+Linguis-
+tics theory meets llm: Code-switched text generation
+via equivalence constrained large language models.
+ArXiv, abs/2410.22660.
+Jaeseong Lee, YeonJoon Jung, and Seung-won Hwang.
+2024. COMMIT: Code-mixing English-centric large
+language model for multilingual instruction tuning.
+In Findings of the Association for Computational Lin-
+guistics: NAACL 2024, pages 3130–3137, Mexico
+City, Mexico. Association for Computational Lin-
+guistics.
+Chunlan Ma, Yihong Liu, Haotian Ye, and Hinrich
+Schütze. 2024. Exploring role of transliteration in in-
+context learning for low-resource languages written
+in non-latin scripts. Preprint, arXiv:2407.02320.
+Amr Mohamed, Yang Zhang, M. Vazirgiannis, and
+Guokan Shang. 2025.
+Lost in the mix: Evaluat-
+ing llm understanding of code-switched text. ArXiv,
+abs/2506.14012.
+Tanay Nagar, Grigorii Khvatskii, Anna Sokol, and
+Nitesh V. Chawla. 2025. Breaking language barri-
+ers: Equitable performance in multilingual language
+models. Preprint, arXiv:2508.12662.
+Ercong Nie, Helmut Schmid, and Hinrich Schutze. 2025.
+Mechanistic understanding and mitigation of lan-
+guage confusion in english-centric large language
+models. ArXiv, abs/2505.16538.
+Iñigo Parra. 2023. Do you speak basquenglish? as-
+sessing low-resource multilingual proficiency of pre-
+trained language models. In Computer Science &
+Information Technology (CS & IT) Conference Pro-
+ceedings, pages 195–207.
+Shana Poplack. 1980. Sometimes i’ll start a sentence in
+spanish y termino en español: Toward a typology of
+code-switching. Linguistics, 18(7-8):581–618.
+Ayan Sengupta, Md. Shad Akhtar, and Tanmoy
+Chakraborty. 2023. Persona-aware generative model
+for code-mixed language. ArXiv, abs/2309.02915.
+Bhavani Shankar, Preethi Jyothi, and Pushpak Bhat-
+tacharyya. 2024. In-context mixing (ICM): Code-
+mixed prompts for multilingual LLMs. In Proceed-
+ings of the 62nd Annual Meeting of the Association
+for Computational Linguistics (Volume 1: Long Pa-
+pers), pages 4162–4176, Bangkok, Thailand. Associ-
+ation for Computational Linguistics.
+Rajvee Sheth, Himanshu Beniwal, and Mayank Singh.
+2025a. Comi-lingua: Expert annotated large-scale
+dataset for multitask nlp in hindi-english code-
+mixing. Preprint, arXiv:2503.21670.
+Rajvee Sheth, Samridhi Raj Sinha, Mahavir Patil, Hi-
+manshu Beniwal, and Mayank Singh. 2025b. Be-
+yond monolingual assumptions: A survey of code-
+switched nlp in era of large language models. arXiv
+preprint arXiv:2510.07037.
+D. Sravani and Radhika Mamidi. 2023.
+Enhancing
+code-mixed text generation using synthetic data fil-
+tering in neural machine translation. In Conference
+on Computational Natural Language Learning.
+Vivek Srivastava and Mayank Singh. 2021. Challenges
+and limitations with the metrics measuring the com-
+plexity of code-mixed text. In Proceedings of the
+Fifth Workshop on Computational Approaches to Lin-
+guistic Code-Switching, pages 6–14, Online. Associ-
+ation for Computational Linguistics.
+Igor Sterner. 2024. Multilingual identification of en-
+glish code-switching. Proceedings of the Eleventh
+Workshop on NLP for Similar Languages, Varieties,
+and Dialects.
+Igor Sterner and Simone Teufel. 2025.
+Minimal
+pair-based evaluation of code-switching.
+ArXiv,
+abs/2506.01840.
+Sathya Krishnan Suresh, Tanmay Surana, Zhi Hao Lim,
+and Eng Siong Chng. 2025.
+Cs-sum: A bench-
+mark for code-switching dialogue summarization
+and the limits of large language models. Preprint,
+arXiv:2505.13559.
+Vinit Sudhir Wadgaonkar and Nalini Ratha. 2025. An
+adversarial toxicity prompt generator exploiting mul-
+tilingual code-switching in llms. In 2025 IEEE Con-
+ference on Artificial Intelligence (CAI). IEEE.
+Genta Indra Winata, Alham Fikri Aji, Zheng-Xin Yong,
+and Thamar Solorio. 2023. The decades progress on
+code-switching research in nlp: A systematic survey
+on trends and challenges. Findings of the Association
+for Computational Linguistics: ACL 2023, pages
+2936–2978.
+Yilun Yang and Yekun Chai. 2025. Evaluating code-
+mixing in llms across 18 languages. In unknown.
+Haneul Yoo, Cheonbok Park, Sangdoo Yun, Alice Oh,
+and Hwaran Lee. 2024a. Code-switching curriculum
+learning for multilingual transfer in llms. In Annual
+Meeting of the Association for Computational Lin-
+guistics.
+
+===== PAGE 11 =====
+Haneul Yoo, Yongjin Yang, and Hwaran Lee. 2024b.
+Code-switching red-teaming: Llm evaluation for
+safety and multilingual understanding. In Annual
+Meeting of the Association for Computational Lin-
+guistics.
+Ruochen Zhang, Samuel Cahyawijaya, Jan Christian
+Blaise Cruz, Genta Indra Winata, and Alham Fikri
+Aji. 2023a. Multilingual large language models are
+not (yet) code-switchers. In Proceedings of the 2023
+Conference on Empirical Methods in Natural Lan-
+guage Processing (EMNLP), Singapore. Association
+for Computational Linguistics.
+Ruochen Zhang, Long Phan, Samuel Cahyawijaya, Holy
+Lovenia, Zheng-Xin Yong, Genta Indra Winata, Al-
+ham Fikri Aji, Lintang Sutawika, Arjun Subramo-
+nian, Jessica Zosa Forde, Yinghua Tan, Jan Chris-
+tian Blaise Cruz, and Skyler Wang. 2023b. Prompt-
+ing multilingual large language models to generate
+code-mixed texts: The case of south east asian lan-
+guages. ArXiv, abs/2303.13592.
+Wenbo Zhang, Aditya Majumdar, and Amulya Yadav.
+2025. Chai for llms:improving code-mixed transla-
+tion in large language models through reinforcement
+learning with ai. Preprint, arXiv:2411.09073.
+Zining Zhu, Houjiang Liu, and 1 others. 2025.
+Code-switching in-context learning for cross-lingual
+transfer of large language models.
+Preprint,
+arXiv:2505.11877.
+
+===== PAGE 12 =====
+A
+Landscape of Tasks and Applications
+Code-mixing is not a single task but a pervasive lin-
+guistic condition that reshapes requirements across
+the NLP stack. Because mixed-language inputs in-
+terleave vocabularies, scripts, and grammatical sys-
+tems within the same utterance, systems must sup-
+port foundational analysis tasks such as token and
+span level language identification, part of speech
+tagging, and named entity recognition, along with
+deeper structural processing such as dependency
+parsing and syntax aware relation extraction.
+At the semantic level, code-mixing affects
+knowledge intensive applications including search
+and retrieval, semantic similarity, and question an-
+swering, where models must remain robust to query
+document mismatch across scripts and languages.
+It also impacts generation oriented settings such
+as machine translation to and from code mixed
+text, controlled generation with natural switch pat-
+terns, and interactive assistants for dialogue and
+summarization, as well as education focused tasks
+like learner friendly grammatical error correction
+that preserves intended switches. Across these
+families, code-mixing amplifies cross cutting con-
+cerns around personalization, reliability, and safety,
+including robustness and guardrail bypass under
+mixed language prompts.
+B
+Evaluation Method Comparison
+Table 1 summarizes the primary evaluation method
+families for code-mixed LLMs, contrasting their
+signals, strengths, and limitations. Reliable assess-
+ment typically requires combining structural instru-
+mentation with semantic and acceptability signals.
+C
+Embeddings for Code-Mixed Language
+A central challenge in modeling code-mixed text is
+the creation of embeddings that maintain semantic
+consistency when languages and scripts are inter-
+mingled. The goal is to ensure that a sentence and
+its code-switched counterpart are mapped to nearby
+points in the vector space, a property not guaran-
+teed by standard multilingual models. Research
+in this area has moved beyond simply applying
+pre-trained models to developing specialized objec-
+tives and architectures designed to produce robust,
+switch-aware code-mix embeddings.
+C.1
+Contrastive Learning for Cross-Lingual
+Alignment
+A primary strategy for creating robust code-mix
+embeddings is contrastive learning, which explic-
+itly trains a model to align the representations of
+monolingual sentences with their code-switched
+equivalents.
+The seminal work in this area is ConCSE, a
+framework that extends SimCSE by introducing
+cross-contrastive and triplet loss objectives (Jeon
+et al., 2024). During training, the model is tasked
+with pulling the embedding of a monolingual sen-
+tence closer to its code-mixed version while push-
+ing it away from other negative examples. This
+process directly optimizes the embedding space for
+consistency across monolingual and code-switched
+forms, resulting in sentence embeddings that are
+significantly more robust for downstream tasks like
+semantic textual similarity.
+For the specific domain of Information Re-
+trieval (IR), Do et al. (2024) identified a key prob-
+lem: naively training on code-mixed data can im-
+prove language alignment at the expense of rel-
+evance matching. Their proposed method, Con-
+trastiveMix, disentangles these two forces with a
+dual-loss architecture. It retains the standard IR
+contrastive loss for query-passage relevance while
+adding a separate, query-side loss to align the em-
+beddings of English and code-mixed query varia-
+tions. This approach successfully creates embed-
+dings that improve cross-lingual retrieval without
+degrading the core relevance-matching capability.
+C.2
+Architectures and Pre-training for
+Switch-Aware Embeddings
+Another major line of work focuses on modifying
+pre-training objectives and model architectures to
+build switch-awareness directly into the encoder.
+Instead of aligning representations post-hoc, these
+methods produce embeddings that are inherently
+sensitive to the structure of code-mixing.
+CMLFormer introduces a novel pre-training
+setup with a shared encoder and two synchronized
+decoders, augmented with switch-specific tasks
+like predicting the location of language switches
+(Baral et al., 2025). When detached for down-
+stream tasks, the shared encoder produces to-
+ken and sentence embeddings that are explicitly
+informed by the code-mixing seen during pre-
+training, leading to improved performance on tasks
+like hate speech detection.
+
+===== PAGE 13 =====
+Table 1: Comparison of evaluation methods for code-mixed LLMs. Each method emphasizes a different construct;
+reliable assessment typically requires combining structural instrumentation with semantic and acceptability signals.
+Method Family
+Primary Signal
+Strengths & Limitations
+Overlap metrics (BLEU,
+ROUGE)
+Reference n-gram overlap
++ Exact-match, translation-like tasks – Rewards mono-
+lingual copying; weak switch sensitivity
+Structural indices (CMI,
+M-Index, I-Index)
+Language IDs & token statistics
++ Detects collapse, imbalance, over/under-switching –
+No semantic or naturalness assessment
+Human
+acceptability
+(Likert)
+Bilingual naturalness & gram-
+maticality
++ Identifies ungrammatical/odd switching – Expensive;
+inter-rater & community variation
+Pairwise preference
+Relative output quality
++ Robust model/prompt selection – No absolute quality
+scores
+LLM-as-a-Judge
+Rubric-based LLM scoring
++ Fast regression testing & semantic evaluation – Judge
+bias; needs calibration
+Targeted semantic (e.g.,
+PIER)
+Word/slot/entity-level correct-
+ness
++ Switch-local semantic errors – Needs predefined
+points; misses global coherence
+RESBERT enhances the standard BERT archi-
+tecture with two key modifications: a residual con-
+nection from an intermediate layer into the final
+MLM head and an auxiliary token-level Language
+ID loss (Das et al., 2023). Probing experiments
+show that the resulting hidden states better encode
+switch-boundary information, creating an embed-
+ding space where code-mixed features are more
+localized and separable. A simpler but effective ap-
+proach is continued pre-training, where a model
+like DistilBERT is further trained on synthetic
+code-mixed text. This was shown by Goswami
+et al. (2023) to yield more stable embeddings under
+the noisy and transliterated conditions common in
+South Asian code-mixed text.
+C.3
+Embeddings from Explicit Linguistic
+Structures
+A more specialized but powerful approach involves
+creating embeddings that are informed by explicit
+linguistic structure from multiple languages simul-
+taneously. The most prominent example is the
+use of Code-Mixed Universal Dependency (UD)
+Forests for cross-lingual relation extraction (Fei
+et al., 2023). This method first generates UD parse
+trees for a sentence in both its source and target
+languages. These two trees are then merged into
+a single graph structure, or “forest.” A Graph At-
+tention Network then encodes this forest, creating
+node embeddings that combine the semantic infor-
+mation from a multilingual language model with
+the rich, cross-lingual topological information from
+the merged parse trees. The resulting embeddings
+are syntactically aware across both languages and
+have been shown to significantly improve perfor-
+mance by mitigating transfer bias.
