@@ -241,14 +241,29 @@ def sync_note(markdown_path, parent_item_id):
     # Convert to Zotero-safe HTML
     html = md_to_zotero_html(md_body)
 
-    # Write to SQLite
+    # Write to SQLite.
+    #
+    # isolation_level=None + explicit BEGIN IMMEDIATE is the actual fix for
+    # the itemID race documented in _create_note's docstring: BEGIN IMMEDIATE
+    # takes a write lock on the whole DB up front, so if Zotero's own client
+    # (or another instance of this script) is still holding the file, it
+    # can't interleave a write between our read (_find_child_note /
+    # SELECT MAX(itemID)) and our INSERT/UPDATE — the window is closed
+    # structurally, not just detected after the fact. The IntegrityError
+    # retry in _create_note stays as defense-in-depth for the rare case a
+    # lock can't be taken (e.g. WAL-mode edge cases) and a collision still
+    # slips through. timeout=30 lets us wait out a lock Zotero is about to
+    # release instead of failing immediately with "database is locked".
     close_zotero_first()
-    conn = sqlite3.connect(str(ZOTERO_DB))
+    conn = sqlite3.connect(str(ZOTERO_DB), timeout=30)
+    conn.isolation_level = None
     try:
         cur = conn.cursor()
+        cur.execute("BEGIN IMMEDIATE")
 
         parent_error = _validate_parent(cur, parent_item_id)
         if parent_error:
+            conn.rollback()
             return {"status": "❌", "error": f"父条目校验失败: {parent_error}"}
 
         existing_id = _find_child_note(cur, parent_item_id)
@@ -279,6 +294,17 @@ def sync_note(markdown_path, parent_item_id):
             }
 
         return result
+    except sqlite3.OperationalError as e:
+        # Most likely "database is locked" — we waited out the 30s timeout
+        # and Zotero (or another writer) never released it. Roll back
+        # explicitly rather than leaving a half-open transaction for
+        # conn.close() to clean up implicitly, and surface a clear cause
+        # instead of a raw sqlite traceback.
+        conn.rollback()
+        return {"status": "❌", "error": f"Zotero 数据库被锁定或写入失败: {e}"}
+    except Exception as e:
+        conn.rollback()
+        return {"status": "❌", "error": f"同步笔记时出错: {e}"}
     finally:
         # Always release the connection, even if a write above raised —
         # previously an exception mid-transaction left the connection open.
