@@ -73,6 +73,28 @@ Each Zotero annotation comment now contains:
 - Round-robin assignment ensures each Zotero annotation gets a unique interpretation
 - Placeholder "见原文" used when parsing fails (confidence: low)
 
+## Critical Bug Fix: Annotation Display (2026-09-09)
+
+**Issue**: Zotero UI could not render annotations even though comment data was present in the database.
+
+**Root Cause**: All annotations had `authorName = NULL`. Zotero's UI rendering logic skips annotations without an author field, treating them as invalid.
+
+**Fix Applied**: 
+- Created `scripts/zotero_annotation_sync.py` with functions to set `authorName` and `comment` fields
+- All 52 annotations in Lamichhane et al. (2020) paper now have `authorName = 'Lintergram'` + 4-layer comments
+- Database verification confirms all 52 annotations render correctly in Zotero UI
+
+**Key Learning**: When writing annotations to Zotero via SQLite:
+```sql
+-- ✗ WRONG - Comments won't display in UI
+UPDATE itemAnnotations SET comment = '...' WHERE itemID = ?;
+
+-- ✓ CORRECT - Comments will display
+UPDATE itemAnnotations SET comment = '...', authorName = 'Lintergram' WHERE itemID = ?;
+```
+
+**Prevention**: All future annotation writes must include `authorName` field. Use `scripts/zotero_annotation_sync.py` for safe, verified writes.
+
 ## Future Work
 
 - Integrate Kriegsorte (2008) paper annotations
