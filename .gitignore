@@ -25,3 +25,7 @@ indieproj/
 *.hwp
 *.docx
 *.pptx
+
+# Paper PDFs (copyrighted journal/publisher content — keep local only,
+# never redistribute through the repo)
+*.pdf
