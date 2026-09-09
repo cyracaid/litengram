@@ -21,13 +21,13 @@ curl -s "http://127.0.0.1:23119/api/users/0/items/{itemKey}/children"
 ### 2. 检查本地文件
 
 ```bash
-ls /Users/sloblucyra/Documents/CAD/litreview/ | grep -i "{AuthorYear}"
+ls /Users/sloblucyra/Documents/litengram/litreview/ | grep -i "{AuthorYear}"
 ```
 
 或搜索文件内容中的 Zotero key：
 
 ```bash
-grep -l "Zotero: .*{itemKey}" /Users/sloblucyra/Documents/CAD/litreview/*.md
+grep -l "Zotero: .*{itemKey}" /Users/sloblucyra/Documents/litengram/litreview/*.md
 ```
 
 ### 3. 判定

@@ -111,7 +111,7 @@ curl -s "http://127.0.0.1:23119/api/users/0/collections/{collectionKey}"
 
 - 匹配成功 → `litreview_dir = {project_dir}/litreview/`（不存在则 mkdir）
 - 论文在多个 collection → 取第一个匹配的
-- 无匹配 → 默认 `~/Documents/CAD/litreview/`
+- 无匹配 → 默认 `~/Documents/litengram/litreview/`
 
 ### 5. （可选）上下文注入
 

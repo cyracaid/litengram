@@ -156,7 +156,7 @@ Stage 4-5 启动时自行查询 Zotero API 获取当前标注数，动态判定�
 
 写入 `{litreview_dir}/{AuthorYear_ShortTitle}.md`。
 
-`litreview_dir` 由 Stage 1-2 从 Zotero collection 自动解析并传入。默认值为 `~/Documents/CAD/litreview/`。
+`litreview_dir` 由 Stage 1-2 从 Zotero collection 自动解析并传入。默认值为 `~/Documents/litengram/litreview/`。
 
 ### 7b. Zotero
 
