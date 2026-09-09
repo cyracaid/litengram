@@ -38,24 +38,38 @@ class NotionSync:
         CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
         CONFIG_PATH.write_text(json.dumps(data, indent=2, ensure_ascii=False))
 
+    @staticmethod
+    def _page_title(page_obj):
+        """Extract the title string from a Notion page object's properties."""
+        for prop in page_obj.get("properties", {}).values():
+            if prop.get("type") == "title" and prop.get("title"):
+                return prop["title"][0].get("plain_text", "")
+        return ""
+
     def resolve_page_id(self):
         cache = self._load_cache()
         cached_id = cache.get("notion_daily_page_id")
 
         if cached_id:
             if self.client:
-                # Verify the cached page still exists / is still shared
-                # with the integration before trusting it — previously a
-                # renamed, deleted, or unshared page would only surface
-                # as a confusing raw exception deep inside sync_note,
-                # with no way to refresh the cache short of hand-editing
-                # the config file.
+                # Verify the cached page still exists AND is still titled
+                # "每日读读文献" before trusting it. Checking existence alone
+                # isn't enough: if the user ever renamed/archived the old
+                # page and created a new one with the same name (or the
+                # cache was pointing at the wrong page some other way),
+                # pages.retrieve() on the stale id still succeeds — no
+                # exception, sync_note() returns "✅" — but every write
+                # lands on a page the user no longer sees as "today's"
+                # 每日读读文献, so nothing shows up where they're looking.
                 try:
-                    self.client.pages.retrieve(page_id=cached_id)
-                    self.daily_page_id = cached_id
-                    return True
+                    page = self.client.pages.retrieve(page_id=cached_id)
+                    if self._page_title(page) == DAILY_PAGE_NAME:
+                        self.daily_page_id = cached_id
+                        return True
+                    # Exists, but no longer the right page — fall through
+                    # to re-resolve by search below instead of trusting it.
                 except Exception:
-                    pass  # stale cache — fall through and re-resolve below
+                    pass  # stale cache (deleted/unshared) — same fallthrough
             else:
                 # No client to verify with; trust the cache optimistically.
                 self.daily_page_id = cached_id
@@ -70,17 +84,26 @@ class NotionSync:
                 filter={"property": "object", "value": "page"},
             ).get("results", [])
 
-            for r in results:
-                # Find the property with type "title" (key may be "Title" / "title" / "Name")
-                page_title = ""
-                for prop in r.get("properties", {}).values():
-                    if prop.get("type") == "title" and prop.get("title"):
-                        page_title = prop["title"][0].get("plain_text", "")
-                        break
-                if page_title == DAILY_PAGE_NAME:
-                    self.daily_page_id = r["id"]
-                    self._save_cache({"notion_daily_page_id": self.daily_page_id})
-                    return True
+            matches = [r for r in results if self._page_title(r) == DAILY_PAGE_NAME]
+            if len(matches) > 1:
+                print(
+                    f"Notion: ⚠ 找到 {len(matches)} 个同名页「{DAILY_PAGE_NAME}」，"
+                    f"使用第一个 (id={matches[0]['id']})。如果内容出现在错误的页里，"
+                    f"请手动确认/清理重复页，并在 .litengram_config.json 里改写 "
+                    f"notion_daily_page_id 指向你要用的那个"
+                )
+            if matches:
+                self.daily_page_id = matches[0]["id"]
+                # Merge into the existing cache, don't replace it — this
+                # used to call self._save_cache({"notion_daily_page_id":
+                # ...}), which overwrites the WHOLE config file with just
+                # that one key, silently deleting project_dirs and the
+                # notion_toggle_ids cache every time this fallback path
+                # ran (which the title-check above now makes more likely
+                # to happen).
+                cache["notion_daily_page_id"] = self.daily_page_id
+                self._save_cache(cache)
+                return True
 
             print(f"Notion: ❌ 页「{DAILY_PAGE_NAME}」未找到，请确认已分享给 integration")
             return False
