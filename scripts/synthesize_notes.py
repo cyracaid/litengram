@@ -8,7 +8,7 @@ from collections import defaultdict
 
 LITREVIEW_DIR = Path(os.environ.get(
     "LITENGRAM_LITREVIEW_DIR",
-    str(Path.home() / "Documents/CAD/litreview")
+    str(Path.home() / "Documents/litengram/litreview")
 ))
 
 
@@ -44,6 +44,7 @@ def parse_note(filepath):
         "limitations": [],
     }
 
+    offset = 0
     for line in content.split("\n"):
         s = line.strip()
 
@@ -63,10 +64,17 @@ def parse_note(filepath):
             result["action_plan"].append(s[5:].strip())
 
         if s.startswith("- ") and len(s) > 10:
-            context_start = max(0, content[:content.find(s)].rfind("\n", 0))
-            before = content[:context_start][-200:]
+            # Use this line's real offset in `content` (tracked while
+            # iterating below), not content.find(s). find(s) re-searches
+            # by text and always resolves to the *first* occurrence, so
+            # if the same short bullet text appears more than once in a
+            # note, every later duplicate got classified using the first
+            # one's surrounding context instead of its own.
+            before = content[:offset][-200:]
             if any(h in before for h in ["已知 (Known)", "Known)"]):
                 result["known"].append(s[2:].strip())
+
+        offset += len(line) + 1  # +1 for the "\n" that split("\n") consumed
 
     aim_text = section_between(content, "研究目标", "### 🧠 理论背景")
     if not aim_text:

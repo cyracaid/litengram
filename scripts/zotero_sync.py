@@ -12,6 +12,8 @@ import sqlite3
 import os
 from pathlib import Path
 
+from _markdown_blocks import parse_blocks, parse_inline_spans
+
 ZOTERO_DB = Path(os.environ.get("ZOTERO_DB_PATH", str(Path.home() / "Zotero/zotero.sqlite")))
 LIBRARY_ID = int(os.environ.get("LITENGRAM_LIBRARY_ID", "1"))
 
@@ -19,9 +21,51 @@ LIBRARY_ID = int(os.environ.get("LITENGRAM_LIBRARY_ID", "1"))
 _KEY_CHARS = "23456789ABCDEFGHIJKLMNPQRSTUVWXYZ"
 
 
-def zotero_key():
-    """Generate a valid 8-char Zotero item key."""
-    return "".join(random.choice(_KEY_CHARS) for _ in range(8))
+def zotero_key(cur=None):
+    """Generate a valid 8-char Zotero item key.
+
+    If a DB cursor is given, retries on collision against existing keys
+    in this library. A collision is astronomically unlikely with a
+    random 8-char key, but it was previously entirely unhandled and
+    would have surfaced as a raw sqlite UNIQUE-constraint error.
+    """
+    for _ in range(20):
+        key = "".join(random.choice(_KEY_CHARS) for _ in range(8))
+        if cur is None:
+            return key
+        cur.execute("SELECT 1 FROM items WHERE key=? AND libraryID=?", (key, LIBRARY_ID))
+        if not cur.fetchone():
+            return key
+    raise RuntimeError("zotero_key: failed to generate a unique key after 20 attempts")
+
+
+def _esc(text):
+    """Escape HTML special chars."""
+    return (
+        text.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+    )
+
+
+def _inline(text):
+    """Convert inline **bold**, *italic*, `code` spans to Zotero-safe HTML."""
+    out = []
+    for kind, content in parse_inline_spans(text):
+        escaped = _esc(content)
+        if kind == "code":
+            out.append(f"<code>{escaped}</code>")
+        elif kind == "bold":
+            out.append(f"<b>{escaped}</b>")
+        elif kind == "italic":
+            out.append(f"<i>{escaped}</i>")
+        else:
+            out.append(escaped)
+    return "".join(out)
+
+
+_HEADING_TAGS = {1: "h1", 2: "h2", 3: "h3", 4: "h4"}
 
 
 def md_to_zotero_html(md_text):
@@ -30,186 +74,66 @@ def md_to_zotero_html(md_text):
     Zotero 7 renders a subset of XHTML in notes. This converter
     targets that subset: headers, bold, italic, lists, tables,
     blockquotes, code — with no raw HTML in the source Markdown.
+
+    Block-level splitting is shared with notion_sync.py via
+    _markdown_blocks.py, so the two sync targets can't silently drift
+    on what counts as a table / numbered list / heading.
     """
-    lines = md_text.strip().split("\n")
     out = []
-    i = 0
+    for block in parse_blocks(md_text):
+        btype = block["type"]
 
-    def esc(text):
-        """Escape HTML special chars."""
-        return (
-            text.replace("&", "&amp;")
-            .replace("<", "&lt;")
-            .replace(">", "&gt;")
-            .replace('"', "&quot;")
-        )
+        if btype == "heading":
+            tag = _HEADING_TAGS[block["level"]]
+            out.append(f"<{tag}>{_inline(block['text'])}</{tag}>")
 
-    def inline(text):
-        """Convert inline **bold**, *italic*, `code` to Zotero-safe HTML."""
-        text = esc(text)
-        # code backtick first (so ** inside `` is not parsed)
-        text = re.sub(r"`([^`]+)`", r"<code>\1</code>", text)
-        # bold
-        text = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", text)
-        # italic
-        text = re.sub(r"\*(.+?)\*", r"<i>\1</i>", text)
-        return text
+        elif btype == "paragraph":
+            out.append(f"<p>{_inline(block['text'])}</p>")
 
-    def flush_para(para_lines):
-        """Flush accumulated paragraph lines as <p>."""
-        if not para_lines:
-            return
-        merged = " ".join(para_lines).strip()
-        if merged:
-            out.append(f"<p>{inline(merged)}</p>")
+        elif btype == "blockquote":
+            parts = [_inline(line) for line in block["lines"]]
+            out.append("<blockquote><p>" + "</p><p>".join(parts) + "</p></blockquote>")
 
-    para = []
+        elif btype == "bullet_list":
+            items = "\n".join(f"<li>{_inline(item)}</li>" for item in block["items"])
+            out.append(f"<ul>\n{items}\n</ul>")
 
-    while i < len(lines):
-        raw = lines[i]
-        s = raw.strip()
+        elif btype == "numbered_list":
+            items = "\n".join(f"<li>{_inline(item)}</li>" for item in block["items"])
+            out.append(f"<ol>\n{items}\n</ol>")
 
-        if not s:
-            # Blank line → flush paragraph
-            flush_para(para)
-            para = []
-            i += 1
-            continue
+        elif btype == "table":
+            rows = block["rows"]
+            table_html = "<table>\n"
+            for idx, row in enumerate(rows):
+                tag = "th" if idx == 0 else "td"
+                table_html += "<tr>" + "".join(f"<{tag}>{_inline(cell)}</{tag}>" for cell in row) + "</tr>\n"
+            table_html += "</table>"
+            out.append(table_html)
 
-        # # heading 1
-        if s.startswith("# ") and not s.startswith("## "):
-            flush_para(para)
-            para = []
-            out.append(f"<h1>{inline(s[2:])}</h1>")
-            i += 1
-            continue
-
-        # ## heading 2
-        if s.startswith("## ") and not s.startswith("### "):
-            flush_para(para)
-            para = []
-            out.append(f"<h2>{inline(s[3:])}</h2>")
-            i += 1
-            continue
-
-        # ### heading 3
-        if s.startswith("### ") and not s.startswith("#### "):
-            flush_para(para)
-            para = []
-            out.append(f"<h3>{inline(s[4:])}</h3>")
-            i += 1
-            continue
-
-        # #### heading 4
-        if s.startswith("#### "):
-            flush_para(para)
-            para = []
-            out.append(f"<h4>{inline(s[5:])}</h4>")
-            i += 1
-            continue
-
-        # Blockquote: merge consecutive > lines
-        if s.startswith(">"):
-            flush_para(para)
-            para = []
-            quote_parts = []
-            while i < len(lines):
-                ls = lines[i].strip()
-                if ls.startswith(">"):
-                    text = ls[1:].strip()
-                    if text:
-                        quote_parts.append(inline(text))
-                    i += 1
-                else:
-                    break
-            if quote_parts:
-                out.append("<blockquote><p>" + "</p><p>".join(quote_parts) + "</p></blockquote>")
-            continue
-
-        # Bullet list: - or *
-        if s.startswith("- ") or s.startswith("* "):
-            flush_para(para)
-            para = []
-            items = []
-            while i < len(lines):
-                ls = lines[i].strip()
-                if ls.startswith("- ") or ls.startswith("* "):
-                    items.append(inline(ls[2:]))
-                    i += 1
-                else:
-                    break
-            out.append("<ul>\n" + "\n".join(f"<li>{item}</li>" for item in items) + "\n</ul>")
-            continue
-
-        # Numbered list
-        m = re.match(r"^\d+\.\s*(.*)", s)
-        if m:
-            flush_para(para)
-            para = []
-            items = []
-            while i < len(lines):
-                ls = lines[i].strip()
-                mm = re.match(r"^\d+\.\s*(.*)", ls)
-                if mm:
-                    items.append(inline(mm.group(1)))
-                    i += 1
-                else:
-                    break
-            out.append("<ol>\n" + "\n".join(f"<li>{item}</li>" for item in items) + "\n</ol>")
-            continue
-
-        # Table: |...|...|
-        if s.startswith("|") and s.endswith("|") and s.count("|") >= 3:
-            flush_para(para)
-            para = []
-            rows = []
-            while i < len(lines):
-                ls = lines[i].strip()
-                if ls.startswith("|") and ls.endswith("|"):
-                    cells = [c.strip() for c in ls.split("|")[1:-1]]
-                    # Skip separator rows
-                    if cells and all(re.match(r"^-+$", c) for c in cells):
-                        i += 1
-                        continue
-                    if cells:
-                        rows.append(cells)
-                else:
-                    break
-                i += 1
-            if len(rows) >= 2:
-                table_html = "<table>\n"
-                for idx, row in enumerate(rows):
-                    tag = "th" if idx == 0 else "td"
-                    table_html += "<tr>" + "".join(f"<{tag}>{inline(cell)}</{tag}>" for cell in row) + "</tr>\n"
-                table_html += "</table>"
-                out.append(table_html)
-            continue
-
-        # Horizontal rule
-        if re.match(r"^-{3,}$", s):
-            flush_para(para)
-            para = []
+        elif btype == "hr":
             out.append("<hr/>")
-            i += 1
-            continue
-
-        # Default: accumulate paragraph
-        para.append(s)
-        i += 1
-
-    # Flush last paragraph
-    flush_para(para)
 
     body = "\n".join(out)
     return f'<div class="zotero-note znv1">\n{body}\n</div>'
 
 
 def _find_child_note(cur, parent_item_id):
-    """Find existing child note for parent. Returns itemID or None."""
+    """Find existing, non-trashed child note for parent. Returns itemID or None.
+
+    Excludes items in Zotero's trash (deletedItems): without this, a note
+    the user deliberately deleted in the Zotero client (but hasn't
+    emptied from trash yet) could be "found" here and silently reused/
+    overwritten on the next sync. When more than one match exists (e.g.
+    from a note created before this dedup logic existed), prefers the
+    most recently created one instead of an arbitrary row.
+    """
     cur.execute(
         "SELECT itemID FROM items WHERE "
         "itemTypeID=28 AND libraryID=? AND "
-        "itemID IN (SELECT itemID FROM itemNotes WHERE parentItemID=?)",
+        "itemID IN (SELECT itemID FROM itemNotes WHERE parentItemID=?) "
+        "AND itemID NOT IN (SELECT itemID FROM deletedItems) "
+        "ORDER BY itemID DESC",
         (LIBRARY_ID, parent_item_id),
     )
     row = cur.fetchone()
@@ -227,7 +151,7 @@ def _create_note(cur, parent_item_id, html_content):
     cur.execute("SELECT MAX(itemID) FROM items")
     max_id = cur.fetchone()[0] or 0
     new_id = max_id + 1
-    key = zotero_key()
+    key = zotero_key(cur)
 
     cur.execute(
         "INSERT INTO items (itemID, itemTypeID, key, dateAdded, dateModified, libraryID) "
@@ -267,37 +191,41 @@ def sync_note(markdown_path, parent_item_id):
     # Write to SQLite
     close_zotero_first()
     conn = sqlite3.connect(str(ZOTERO_DB))
-    cur = conn.cursor()
+    try:
+        cur = conn.cursor()
 
-    existing_id = _find_child_note(cur, parent_item_id)
-    if existing_id:
-        # UPDATE existing note
-        cur.execute("UPDATE itemNotes SET note=? WHERE itemID=?", (html, existing_id))
-        cur.execute(
-            "UPDATE items SET dateModified=datetime('now') WHERE itemID=?",
-            (existing_id,),
-        )
-        conn.commit()
-        result = {
-            "status": "✅",
-            "itemID": existing_id,
-            "html_len": len(html),
-            "mode": "updated",
-        }
-    else:
-        # CREATE new note
-        new_id, key = _create_note(cur, parent_item_id, html)
-        conn.commit()
-        result = {
-            "status": "✅",
-            "itemID": new_id,
-            "key": key,
-            "html_len": len(html),
-            "mode": "created",
-        }
+        existing_id = _find_child_note(cur, parent_item_id)
+        if existing_id:
+            # UPDATE existing note
+            cur.execute("UPDATE itemNotes SET note=? WHERE itemID=?", (html, existing_id))
+            cur.execute(
+                "UPDATE items SET dateModified=datetime('now') WHERE itemID=?",
+                (existing_id,),
+            )
+            conn.commit()
+            result = {
+                "status": "✅",
+                "itemID": existing_id,
+                "html_len": len(html),
+                "mode": "updated",
+            }
+        else:
+            # CREATE new note
+            new_id, key = _create_note(cur, parent_item_id, html)
+            conn.commit()
+            result = {
+                "status": "✅",
+                "itemID": new_id,
+                "key": key,
+                "html_len": len(html),
+                "mode": "created",
+            }
 
-    conn.close()
-    return result
+        return result
+    finally:
+        # Always release the connection, even if a write above raised —
+        # previously an exception mid-transaction left the connection open.
+        conn.close()
 
 
 def close_zotero_first():

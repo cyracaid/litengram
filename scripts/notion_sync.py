@@ -2,23 +2,27 @@
 
 import json
 import os
-import re
 import time
 from datetime import datetime
 from pathlib import Path
 
 from notion_client import Client
 
-CONFIG_PATH = Path(os.environ.get("LITENGRAM_CONFIG_PATH", str(Path.home() / "Documents/CAD/.litengram_config.json")))
+from _markdown_blocks import parse_blocks, parse_inline_spans
+
+CONFIG_PATH = Path(os.environ.get("LITENGRAM_CONFIG_PATH", str(Path.home() / "Documents/litengram/.litengram_config.json")))
 DAILY_PAGE_NAME = "每日读读文献"
 MAX_APPEND = 100
-MAX_DEPTH = 2
 
 
 class NotionSync:
     def __init__(self):
         self.token = os.environ.get("NOTION_TOKEN")
-        self.client = None
+        # Create the client up front (not just inside sync_note) so the
+        # documented standalone usage in SKILL.md — `ns = NotionSync();
+        # ns.resolve_page_id()` — actually works on a cold cache instead
+        # of silently returning False because no client existed yet.
+        self.client = Client(auth=self.token) if self.token else None
         self.daily_page_id = None
         self.status = {}
 
@@ -36,9 +40,26 @@ class NotionSync:
 
     def resolve_page_id(self):
         cache = self._load_cache()
-        if cache.get("notion_daily_page_id"):
-            self.daily_page_id = cache["notion_daily_page_id"]
-            return True
+        cached_id = cache.get("notion_daily_page_id")
+
+        if cached_id:
+            if self.client:
+                # Verify the cached page still exists / is still shared
+                # with the integration before trusting it — previously a
+                # renamed, deleted, or unshared page would only surface
+                # as a confusing raw exception deep inside sync_note,
+                # with no way to refresh the cache short of hand-editing
+                # the config file.
+                try:
+                    self.client.pages.retrieve(page_id=cached_id)
+                    self.daily_page_id = cached_id
+                    return True
+                except Exception:
+                    pass  # stale cache — fall through and re-resolve below
+            else:
+                # No client to verify with; trust the cache optimistically.
+                self.daily_page_id = cached_id
+                return True
 
         if not self.client:
             return False
@@ -68,8 +89,25 @@ class NotionSync:
             print(f"Notion: ❌ Search API 报错: {e}")
             return False
 
-    def _get_toggle_id(self, parent_id, target_title):
-        """Find or create a toggle block with exact title under parent_id."""
+    def _get_toggle_id(self, parent_id, target_title, cache_key=None):
+        """Find or create a toggle block with exact title under parent_id.
+
+        If cache_key is given (used for the per-date toggle), checks/updates
+        a persisted id cache first. Without this, every single sync call —
+        even to append one more paper under today's date — had to page
+        through *every* child of the root page to relocate today's toggle,
+        an ever-growing linear scan as months of reading history pile up.
+        """
+        if cache_key:
+            cache = self._load_cache()
+            cached_id = cache.get("notion_toggle_ids", {}).get(cache_key)
+            if cached_id:
+                try:
+                    self.client.blocks.retrieve(block_id=cached_id)
+                    return cached_id, False
+                except Exception:
+                    pass  # stale — fall through to full search/create below
+
         children = []
         cursor = None
         while True:
@@ -89,6 +127,8 @@ class NotionSync:
                 for rt in child["toggle"]["rich_text"]:
                     text += rt.get("plain_text", "")
                 if text.strip() == target_title:
+                    if cache_key:
+                        self._cache_toggle_id(cache_key, child["id"])
                     return child["id"], False  # existed
 
         new = self.client.blocks.children.append(
@@ -109,7 +149,16 @@ class NotionSync:
             ],
         )
         new_id = new["results"][0]["id"]
+        if cache_key:
+            self._cache_toggle_id(cache_key, new_id)
         return new_id, True  # created
+
+    def _cache_toggle_id(self, date_str, toggle_id):
+        cache = self._load_cache()
+        toggle_map = cache.get("notion_toggle_ids", {})
+        toggle_map[date_str] = toggle_id
+        cache["notion_toggle_ids"] = toggle_map
+        self._save_cache(cache)
 
     def _find_paper_toggle(self, parent_id, paper_title):
         """Check if paper toggle already exists under parent toggle."""
@@ -130,113 +179,57 @@ class NotionSync:
             pass
         return None
 
-    def _md_to_notion_blocks(self, md_text, depth=0):
-        """Convert markdown note to Notion blocks up to MAX_DEPTH nesting."""
+    def _md_to_notion_blocks(self, md_text):
+        """Convert a Markdown note into Notion blocks.
+
+        Block splitting is shared with zotero_sync.py via
+        _markdown_blocks.py (see that module's docstring for why —
+        the two converters used to be separate copies that had already
+        started drifting). `#`/`##` headings are skipped since they're
+        used as toggle titles elsewhere; `###` and `####` both map to
+        Notion's heading_3, since Notion has no heading_4.
+        """
         blocks = []
-        lines = md_text.strip().split("\n")
-        i = 0
+        for block in parse_blocks(md_text):
+            btype = block["type"]
 
-        while i < len(lines):
-            line = lines[i]
-            stripped = line.strip()
+            if btype == "heading":
+                if block["level"] in (1, 2):
+                    continue
+                blocks.append(self._text_block("heading_3", block["text"]))
 
-            if not stripped:
-                i += 1
-                continue
+            elif btype == "paragraph":
+                blocks.append(self._text_block("paragraph", block["text"]))
 
-            # heading_3: ### ...
-            if stripped.startswith("### "):
-                blocks.append(self._text_block("heading_3", stripped[4:]))
-                i += 1
-                continue
+            elif btype == "blockquote":
+                blocks.append(self._text_block("quote", "\n".join(block["lines"])))
 
-            # heading_2: ## ... (skip — used as toggle title)
-            if stripped.startswith("## "):
-                i += 1
-                continue
-
-            # heading_1: # ... (skip)
-            if stripped.startswith("# "):
-                i += 1
-                continue
-
-            # blockquote — merge consecutive > lines into one block
-            if stripped.startswith(">"):
-                quote_lines = []
-                while i < len(lines):
-                    ls = lines[i].strip()
-                    if ls.startswith(">"):
-                        text = ls[1:].strip()
-                        if text:
-                            quote_lines.append(text)
-                        i += 1
-                    else:
-                        break
-                if quote_lines:
-                    merged = "\n".join(quote_lines)
-                    blocks.append(self._text_block("quote", merged))
-                continue
-
-            # bullet list: - or * or 1.
-            if stripped.startswith("- ") or stripped.startswith("* "):
-                lis = []
-                while i < len(lines):
-                    ls = lines[i].strip()
-                    if ls.startswith("- ") or ls.startswith("* "):
-                        lis.append(ls[2:])
-                        i += 1
-                    else:
-                        break
-                for item in lis:
+            elif btype == "bullet_list":
+                for item in block["items"]:
                     blocks.append(self._text_block("bulleted_list_item", item))
-                continue
 
-            if re.match(r"^\d+\. ", stripped):
-                lis = []
-                while i < len(lines):
-                    ls = lines[i].strip()
-                    m = re.match(r"^\d+\.\s*(.*)", ls)
-                    if m:
-                        lis.append(m.group(1))
-                        i += 1
-                    else:
-                        break
-                for item in lis:
-                    blocks.append(self._text_block("bulleted_list_item", item))
-                continue
+            elif btype == "numbered_list":
+                # Previously these were rendered as bulleted_list_item,
+                # which silently discarded the ordering. Notion has its
+                # own numbered_list_item block type for this.
+                for item in block["items"]:
+                    blocks.append(self._text_block("numbered_list_item", item))
 
-            # table detection (simple |...|...|)
-            if "|" in stripped and stripped.count("|") >= 3:
-                table = self._parse_table(lines, i)
+            elif btype == "table":
+                table = self._table_block(block["rows"])
                 if table:
                     blocks.append(table)
-                    i += len(table.get("table", {}).get("children", [])) + 1
-                    continue
 
-            # default: paragraph
-            blocks.append(self._text_block("paragraph", stripped))
-            i += 1
+            elif btype == "hr":
+                # Notion's native divider block — previously "---" fell
+                # through to the default paragraph case and showed up
+                # as a literal "---" line of text.
+                blocks.append({"type": "divider", "divider": {}})
 
         return blocks
 
-    def _parse_table(self, lines, start):
-        """Parse a simple markdown table into Notion table blocks."""
-        rows = []
-        i = start
-        while i < len(lines):
-            s = lines[i].strip()
-            if s.startswith("|") and s.endswith("|"):
-                cells = [c.strip() for c in s.split("|")[1:-1]]
-                # Skip separator row (all cells are --- or similar)
-                if cells and all(re.match(r"^-+$", c) for c in cells):
-                    i += 1
-                    continue
-                if cells:
-                    rows.append(cells)
-            else:
-                break
-            i += 1
-
+    def _table_block(self, rows):
+        """Build a Notion table block from parsed rows (rows[0] is the header)."""
         if len(rows) < 2:
             return None
 
@@ -277,41 +270,23 @@ class NotionSync:
         return {"type": block_type, block_type: {"rich_text": rich_text}}
 
     def _parse_rich_text(self, text):
-        """Parse markdown bold/italic into Notion rich_text annotations."""
-        parts = []
-        # Simple bold: **text** and italic: *text*
-        pattern = re.compile(r"(\*\*(.+?)\*\*|\*(.+?)\*)")
-        last_end = 0
-        for m in pattern.finditer(text):
-            if m.start() > last_end:
-                parts.append(
-                    {
-                        "type": "text",
-                        "text": {"content": text[last_end : m.start()]},
-                    }
-                )
-            if m.group(2):  # bold
-                parts.append(
-                    {
-                        "type": "text",
-                        "text": {"content": m.group(2)},
-                        "annotations": {"bold": True},
-                    }
-                )
-            else:  # italic
-                parts.append(
-                    {
-                        "type": "text",
-                        "text": {"content": m.group(3)},
-                        "annotations": {"italic": True},
-                    }
-                )
-            last_end = m.end()
+        """Parse markdown bold/italic/code into Notion rich_text annotations.
 
-        if last_end < len(text):
-            parts.append(
-                {"type": "text", "text": {"content": text[last_end:]}}
-            )
+        Uses the shared inline-span parser (_markdown_blocks.py). This
+        also picks up `code` spans, which the old hand-rolled bold/italic
+        regex here never recognized — inline `code` used to reach Notion
+        as literal backtick characters instead of a code-formatted span.
+        """
+        parts = []
+        for kind, content in parse_inline_spans(text):
+            entry = {"type": "text", "text": {"content": content}}
+            if kind == "bold":
+                entry["annotations"] = {"bold": True}
+            elif kind == "italic":
+                entry["annotations"] = {"italic": True}
+            elif kind == "code":
+                entry["annotations"] = {"code": True}
+            parts.append(entry)
 
         if not parts:
             parts = [{"type": "text", "text": {"content": text}}]
@@ -331,21 +306,36 @@ class NotionSync:
                 )
         return truncated
 
-    def _clear_children(self, block_id):
-        """Archive all children of a block (delete them)."""
+    def _clear_children(self, block_id, retries=2):
+        """Archive all children of a block (delete them).
+
+        Returns the list of child block IDs that could not be archived.
+        Previously any failure here (most commonly a 429 rate limit) was
+        swallowed silently with no retry, so an update could leave stale
+        old content mixed in with the freshly appended new content with
+        no error surfaced anywhere.
+        """
         cursor = None
+        failed = []
         while True:
             resp = self.client.blocks.children.list(
                 block_id=block_id, page_size=100, start_cursor=cursor
             )
             for child in resp.get("results", []):
-                try:
-                    self.client.blocks.update(block_id=child["id"], archived=True)
-                except Exception:
-                    pass
+                for attempt in range(retries + 1):
+                    try:
+                        self.client.blocks.update(block_id=child["id"], archived=True)
+                        break
+                    except Exception as e:
+                        if "429" in str(e) and attempt < retries:
+                            time.sleep(2 ** (attempt + 1))
+                            continue
+                        failed.append(child["id"])
+                        break
             if not resp.get("has_more"):
                 break
             cursor = resp.get("next_cursor")
+        return failed
 
     def _append_blocks(self, block_id, blocks, retries=2):
         """Append blocks with 100-at-a-time batching and retry on 429."""
@@ -375,7 +365,8 @@ class NotionSync:
         if not self.token:
             return "❌(NOTION_TOKEN 未设置)"
 
-        self.client = Client(auth=self.token)
+        if not self.client:
+            self.client = Client(auth=self.token)
 
         if not self.resolve_page_id():
             return "❌(找不到「每日读读文献」页)"
@@ -383,9 +374,11 @@ class NotionSync:
         date_str = date_str or datetime.now().strftime("%Y-%m-%d")
 
         try:
-            # Step 1: find or create date toggle (never delete existing date toggles)
+            # Step 1: find or create date toggle (never delete existing date
+            # toggles). cache_key=date_str avoids re-listing every child of
+            # the root page on every single sync call.
             date_toggle_id, is_new = self._get_toggle_id(
-                self.daily_page_id, date_str
+                self.daily_page_id, date_str, cache_key=date_str
             )
 
             # Step 2: parse markdown into blocks
@@ -398,8 +391,10 @@ class NotionSync:
                     return "✅(已存在，跳过)"
                 else:
                     # UPDATE mode: clear old children, re-append
-                    self._clear_children(existing_id)
+                    failed = self._clear_children(existing_id)
                     self._append_blocks(existing_id, blocks)
+                    if failed:
+                        return f"✅(已更新，但 {len(failed)} 个旧块未能清除，可能有残留内容)"
                     return "✅(已更新)"
 
             # Step 4: create paper toggle (first time)

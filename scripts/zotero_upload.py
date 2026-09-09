@@ -52,10 +52,20 @@ from pathlib import Path
 import requests
 
 API = "https://api.zotero.org"
-USER_ID = int(os.environ.get("ZOTERO_USER_ID", "11261922"))
+# No personal-account fallback: a missing ZOTERO_USER_ID used to silently
+# default to the original author's own numeric Zotero user ID, so anyone
+# else running this without setting the env var would quietly operate
+# against (or 403/404 against) someone else's library instead of failing
+# clearly. USER_ID is 0 (invalid) until _require_user_id() is called.
+USER_ID = int(os.environ.get("ZOTERO_USER_ID", "0"))
 API_KEY = os.environ.get("ZOTERO_API_KEY", "")
 
 HEADERS = {"Zotero-API-Key": API_KEY, "Zotero-API-Version": "3"}
+
+
+def _require_user_id():
+    if not os.environ.get("ZOTERO_USER_ID"):
+        sys.exit("✗ ZOTERO_USER_ID 未设置：请显式设置该环境变量，不要依赖默认账号")
 
 
 def _hdr():
@@ -305,6 +315,8 @@ def main():
                     help="Skip WebDAV-mode guard (auto upload anyway)")
     args = ap.parse_args()
 
+    _require_user_id()
+
     if not args.item_key and not args.doi:
         sys.exit("✗ 需提供 --doi 或 --item-key")
     if args.manual:
@@ -342,13 +354,29 @@ def main():
 
     # cleanup failed attachment
     def cleanup():
+        """Best-effort delete of the orphaned attachment.
+
+        Previously this read r.json()["version"] and fired the DELETE
+        without checking either response's status. If the GET itself
+        failed, "version" would just be None and the DELETE would be
+        sent with an invalid If-Unmodified-Since-Version header and
+        silently fail too — leaving a dangling attachment item in the
+        library with no warning that cleanup didn't actually happen.
+        """
         r = requests.get(f"{API}/users/{USER_ID}/items/{att_key}", headers=_hdr(), timeout=30)
+        if r.status_code != 200:
+            print(f"⚠ 清理失败：无法读取附件 {att_key} 的版本号 ({r.status_code})，"
+                  f"请手动在 Zotero 里删除这个孤儿附件")
+            return
         ver = r.json().get("version")
-        requests.delete(
+        d = requests.delete(
             f"{API}/users/{USER_ID}/items/{att_key}",
             headers={**_hdr(), "If-Unmodified-Since-Version": str(ver)},
             timeout=30,
         )
+        if d.status_code not in (200, 204):
+            print(f"⚠ 清理失败：删除附件 {att_key} 返回 {d.status_code}，"
+                  f"请手动在 Zotero 里删除这个孤儿附件")
 
     if not md5:
         cleanup()

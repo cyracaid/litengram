@@ -7,8 +7,15 @@ PDF inbox: files land in LITENGRAM_PDF_INBOX if set, else ~/Zotero/pdf-inbox/.
 import os, shutil, requests
 from pathlib import Path
 
-USER_ID = int(os.environ.get("ZOTERO_USER_ID", "11261922"))
+# No personal-account fallback — see zotero_upload.py's USER_ID comment.
+# Left at 0 (invalid) until _require_user_id() is called at actual use.
+USER_ID = int(os.environ.get("ZOTERO_USER_ID", "0"))
 API_KEY = os.environ.get("ZOTERO_API_KEY", "")
+
+
+def _require_user_id():
+    if not os.environ.get("ZOTERO_USER_ID"):
+        raise RuntimeError("ZOTERO_USER_ID 未设置：请显式设置该环境变量，不要依赖默认账号")
 
 # Download landing dir: user override wins, else default under Zotero data dir.
 PDF_INBOX = Path(os.environ.get("LITENGRAM_PDF_INBOX", "~/Zotero/pdf-inbox")).expanduser().resolve()
@@ -39,6 +46,7 @@ def download_pdf(item_key, target_dir=None, filename=None):
     if not API_KEY:
         print("✗ 无法下载: ZOTERO_API_KEY 未设置")
         return None
+    _require_user_id()
 
     target_dir = Path(target_dir or PDF_INBOX).expanduser().resolve()
     target_dir.mkdir(parents=True, exist_ok=True)
@@ -71,7 +79,12 @@ def download_pdf(item_key, target_dir=None, filename=None):
         else:
             print(f"✗ 下载失败 {resp.status_code}: attachment {item_key}")
             return None
-    except Exception:
+    except Exception as e:
+        # Previously silent: a network error / timeout here returned None
+        # with no message at all, unlike every other failure path in this
+        # function, making it indistinguishable from "file just doesn't
+        # exist" during debugging.
+        print(f"✗ 下载出错: {e}")
         return None
 
 
