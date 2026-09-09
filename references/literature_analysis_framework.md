@@ -77,15 +77,16 @@ A（Answer / 答案）: 核心发现是什么？
 
 按三个信号判定 `domain`，结果写入下游（Stage 6 按它选方法节模板，Stage 5 按它选审稿清单）：
 
-| 信号 | psych 信号 | nlp 信号 |
-|------|------|------|
-| 术语 | 被试 / N / 量表 / 方差分析 / 效应量 / 问卷 | 模型 / 数据集 / 评测指标 / baseline / GPU / 消融 / prompt |
-| venue | 心理学期刊（JEP / 心理科学 / Psychological...）| ACL / EMNLP / NAACL / COLING / arXiv-CS |
-| 内容 | 行为/问卷/脑数据 + 统计推断 | 训练/评测/榜单 + 代码 |
+| 信号 | psych 信号 | nlp 信号 | fmri 信号 |
+|------|------|------|------|
+| 术语 | 被试 / N / 量表 / 方差分析 / 效应量 / 问卷 | 模型 / 数据集 / 评测指标 / baseline / GPU / 消融 / prompt | fmri / BOLD / GLM / first-level / second-level / preprocessing / motion | 预处理步骤 / 解剖学 ROI / 效应量 |
+| venue | 心理学期刊（JEP / 心理科学 / Psychological...）| ACL / EMNLP / NAACL / COLING / arXiv-CS | NeuroImage / Neuropsychologia / PNAS / Nature Neuroscience | fmri 期刊/会议 |
+| 内容 | 行为/问卷/脑数据 + 统计推断 | 训练/评测/榜单 + 代码 | fMRI 数据/实验范式 / 预处理流程 / GLM 设计 / 组均值 / FDR 校正 | 采集参数 / 被试内分析 / 组水平分析 |
 
 ```
 domain = psych        → 统计完整性 checklist（下）
 domain = nlp          → NLP 评测公平性 checklist（下）
+domain = fmri         → fMRI 完整性 checklist（见下）
 domain = hybrid       → 两个 checklist 都跑（认知NLP/心理语言学/LLM心理学评估/行为+AI 混合）
 domain = review-theory → 不跑 checklist，走论证结构拆解
 ```
@@ -124,6 +125,16 @@ domain = review-theory → 不跑 checklist，走论证结构拆解
       [ ] 数据污染/泄漏：训练/测试重叠？预训练数据 contamination？
       [ ] 人类评估：评估者数 + 指导语 + 一致性（kappa/ICC）？
       [ ] 代码/权重公开：可复现性承诺？
+
+> **fMRI 完整性 checklist**（fmri 域）：
+      [ ] 预处理完整性：头动校正、畸变校正、核心gistration、空间标准化、平滑、高通滤波均已执行并报告参数
+      [ ] 头动质量：FD > 0.5mm 被剔除 volumes % 报告，scrubbing 方法说明
+      [ ] GLM 设计：first-level 设计矩阵、对比定义、AR(1) 校正报告
+      [ ] 组水平分析：second-level 设计、多重比较校正方法（FWE/FDR/cluster）、校正阈值报告
+      [ ] ROI 分析：ROI 定义是否独立于测试对比（避免 double-dipping）
+      [ ] 排除标准：参与者排除原因、排除比例、demographic 对比报告
+      [ ] 效应量与 CI：Cohen's d / partial η² 及其 95% CI 报告
+      [ ] 预注册：分析计划是否预先注册（OSF/AsPredicted）
 
 层 3: 方法局限 → 反向验证
       psych: 如果降低样本量，结论还成立吗？
