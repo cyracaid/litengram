@@ -80,21 +80,18 @@
 
 ---
 
-## 📚 Complete Documentation Index
+## 📚 Documentation (给自己用的)
 
-| Document | Purpose | Best For |
-|----------|---------|----------|
-| **README.md** (you are here) | Overview + Quick Start | New users, project overview |
-| **[ARCHITECTURE.md](docs/ARCHITECTURE.md)** | System design deep-dive | Developers, contributors |
-| **[API_REFERENCE.md](docs/API_REFERENCE.md)** | Complete function documentation | Advanced users, integration |
-| **[TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)** | Error scenarios + solutions | Problem solving |
-| **[BEST_PRACTICES.md](docs/BEST_PRACTICES.md)** | How to use LitEngram effectively | Power users |
-| **[FAQ.md](docs/FAQ.md)** | Frequently asked questions | Quick answers |
-| **[CONTRIBUTING.md](docs/CONTRIBUTING.md)** | How to contribute | Contributors |
-| **[ROADMAP.md](docs/ROADMAP.md)** | Future plans + milestones | Planning |
-| **[PERFORMANCE.md](docs/PERFORMANCE.md)** | Benchmarks + optimization | Performance-critical users |
-| **[SECURITY.md](docs/SECURITY.md)** | Privacy + data safety | Security-conscious users |
-| **[INTEGRATIONS.md](docs/INTEGRATIONS.md)** | Third-party connections | Integration users |
+**原则**: 文档是给自己省时间的，不是给自己增加维护负担的。
+
+| 何时看 | 文档 | 内容 |
+|--------|------|------|
+| **初次使用** | README.md (this) | 怎么用 |
+| **忘了为什么这么设计** | [ARCHITECTURE.md](docs/ARCHITECTURE.md) | 系统设计 |
+| **遇到问题了** | [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | 常见错误 |
+| **参考信息** | [docs/README.md](docs/README.md) | 其他文档导航 |
+
+**完整列表见**: [docs/README.md](docs/README.md)
 
 ---
 
