@@ -88,35 +88,106 @@ curl -s "http://127.0.0.1:23119/api/users/0/items/{attachmentKey}/children?itemT
 UPDATE itemAnnotations SET comment = '…' WHERE itemID = {annotationItemID};
 ```
 
-#### 创建新的标注条目（模式 A 步骤 2：AI 补充 ~10 条 / 模式 B：~20 条）
+#### 创建新的标注条目（模式 A 步骤 2：AI 补充 ~10 条 / 模式 B：~20 条）— v1.6
 
-```sql
--- itemTypes: 1=annotation, 2=attachment, 28=note
--- Zotero 7: items 表无 parentItemID 列，父关系存 itemAnnotations
+> ✅ **v1.6 重大更新**：v1.2 曾断言"SQLite 不可能构造合法 position"——**已被实操证伪**。
+> 用 PyMuPDF 字符级定位 + y 翻转即可合法插入 PDF 高亮（2026-09 在 NeuroImage/Biological Psychology
+> 两篇 PDF 上批量验证 41 条，Zotero 正常渲染）。高风险步骤已经从"禁止"改为"两条路都合法"（见 annotation_guidelines.md 核心规则）。
 
--- 新建标注条目
-INSERT INTO items (itemTypeID, key, dateAdded, dateModified)
-VALUES (1, 'random_hex_key', datetime('now'), datetime('now'));
+**第一步：用 PyMuPDF 生成合法 position（坐标校准）**
 
--- 添加标注内容（parentItemID 在此指定）
-INSERT INTO itemAnnotations (itemID, parentItemID, type, annotatesItemID, comment, text)
-VALUES ({newItemID}, {parentItemID}, 'highlight', {pdfItemID}, '批注内容', '高亮原文');
+Zotero 的 position y 轴原点在页面底部（PDF 原生坐标系）；PyMuPDF 的 y 原点在顶部。
+两者满足 `zotero_y = pageHeight − pymupdf_y`（用库内已有 annotation 实测校准：`sum ≈ pageHeight`）。
 
--- AI 补充标注的 comment 以 🤖 [AI补充] 开头
-INSERT INTO itemAnnotations (itemID, parentItemID, type, annotatesItemID, comment, text)
-VALUES ({newItemID}, {parentItemID}, 'highlight', {pdfItemID}, '🤖 [AI补充] 批注内容', '高亮原文');
+```python
+# 定位引文 → 行级 rects（Python，PyMuPDF）
+def locate_by_core(pdf_path, term):
+    tcore = ''.join(c for c in unicodedata.normalize("NFKC", term) if c.isalnum()).lower()
+    doc = fitz.open(pdf_path)
+    for p in range(len(doc)):
+        d = doc[p].get_text("dict")
+        chars = []  # (x, bbox, char) 逐字符，剥非字母数字
+        for block in d.get("blocks", []):
+            for line in block.get("lines", []):
+                for sp in line.get("spans", []):
+                    txt = sp.get("text", "")
+                    if not txt.strip(): continue
+                    ntxt = unicodedata.normalize("NFKC", txt)
+                    x0,y0,x1,y1 = sp["bbox"]
+                    w = max(1e-6, (x1-x0)/max(1, len(ntxt)))
+                    for ci,ch in enumerate(ntxt):
+                        if ch.isalnum():
+                            chars.append((x0+ci*w, sp["bbox"], ch.lower()))
+        ctext = "".join(c[2] for c in chars)
+        pos = ctext.find(tcore)
+        if pos >= 0:
+            matched = chars[pos:pos+len(tcore)]
+            pageH = doc[p].rect.height
+            groups = {}   # (y0,y1) → x 列表
+            for x,bbox,ch in matched:
+                groups.setdefault((bbox[1],bbox[3]), []).append(x)
+            rects = [[round(min(xs),3), round(pageH-sy1,3),
+                      round(max(xs),3), round(pageH-sy0,3)]
+                     for (sy0,sy1),xs in groups.items()]
+            rects.sort(key=lambda r:r[1])
+            return {"pageIndex": p, "rects": rects}
+    return None
 ```
 
-#### 创建笔记条目
+- 逐字母数字 char 拼接全文 → 对引文 core 做子串查找 → 容错 PDF 断词/连字符/小数点（`baseline- weighted`、`p=.001`、`F(1,77)` 全兼容）
+- 匹配不到就退行：去掉引文末 5-8 个 token 再试，或改用手工校正的 PDF 原文 term
+- 扫描版 PDF（无文本层）→ 无法生成 position，跳过该条
+
+**第二步：INSERT annotation（schema 全字段）**
+
+```sql
+-- itemTypes: 1=annotation, 2=attachment, 3=attachment(itemAttachments), 28=note
+-- itemAnnotations 真实列：parentItemID, type, authorName, text, comment, color,
+--   pageLabel, sortIndex, position, isExternal, textNormalized, commentNormalized
+INSERT INTO items (itemTypeID, dateAdded, dateModified, clientDateModified,
+                   libraryID, key, version, synced, clientVersion)
+VALUES (1, datetime('now'), datetime('now'), datetime('now'),
+        1, '{8位key}', (SELECT COALESCE(MAX(version),0)+1 FROM items), 0, 0);
+
+INSERT INTO itemAnnotations (itemID, parentItemID, type, authorName,
+                             text, comment, color, pageLabel, sortIndex,
+                             position, isExternal)
+VALUES ({newItemID}, {attachmentItemID}, 1, '',
+        '引文原文', '【定义】…【本文角色】…【论证关联】…【延伸】…',
+        '#ffd400', '{pageIndex+1}',
+        '{pageIndex:05d}|{sortKey:06d}|00001',
+        '{"pageIndex":N,"rects":[[x0,y0,x1,y1],...]}', 0);
+```
+
+- `parentItemID` = **attachment 的 itemID**（不是 journalArticle 的），从 `itemAttachments` 查
+- `text` 存引文原文即可（渲染锚点是 position，不是 text）
+- `type` 存 1（highlight）；颜色 `#ffd400` 黄
+- `sortIndex` 三段格式（Zotero 不严格校验，形似即可）
+- `libraryID=1`，`synced=0`（需手动同步）
+
+#### 创建笔记条目 — v1.6（新增关键坑）
+
+> ⚠️ **note 内容必须包 `<div class="zotero-note znv1">…</div>`**，否则 Zotero 启动时把整篇当纯文本二次转义，
+> 笔记显示成 `&lt;h1&gt;…` 乱码。这是 2026-09 实战踩坑，v1.2 文档没写。
+
+```python
+import markdown
+md = markdown.Markdown(extensions=["tables", "fenced_code"])
+body = md.convert(open(note_md_path).read())
+body = body.replace("<strong>", "<b>").replace("</strong>", "</b>")
+note_html = f'<div class="zotero-note znv1">{body}</div>'
+```
 
 ```sql
 -- 注意：Zotero 7 中 note 的 itemTypeID 是 28（非旧版 14）
-INSERT INTO items (itemTypeID, key, dateAdded, dateModified)
-VALUES (28, 'random_hex_key', datetime('now'), datetime('now'));
+INSERT INTO items (itemTypeID, dateAdded, dateModified, clientDateModified,
+                   libraryID, key, version, synced, clientVersion)
+VALUES (28, datetime('now'), datetime('now'), datetime('now'),
+        1, '{8位key}', (SELECT COALESCE(MAX(version),0)+1 FROM items), 0, 0);
 
--- 父关系在 itemNotes 表中建立
-INSERT INTO itemNotes (itemID, parentItemID, note)
-VALUES ({newItemID}, {parentItemID}, '<h2>笔记标题</h2><p>笔记内容</p>');
+-- 父关系在 itemNotes 表中建立；title 列在 v1.6 schema 中存在
+INSERT INTO itemNotes (itemID, parentItemID, note, title)
+VALUES ({newItemID}, {parentItemID}, '{znv1包裹的HTML}', '笔记标题');
 ```
 
 > key 生成：`import secrets; secrets.token_hex(6)` 生成 12 位十六进制字符串。
@@ -130,6 +201,7 @@ VALUES ({newItemID}, {parentItemID}, '<h2>笔记标题</h2><p>笔记内容</p>')
 > _KEY_CHARS = "23456789ABCDEFGHIJKLMNPQRSTUVWXYZ"
 > key = "".join(random.choice(_KEY_CHARS) for _ in range(8))
 > ```
+> ```
 > 或直接用 `scripts/zotero_sync.py` 的 `zotero_key()`。
 >
 > 另注：SQLite 直插的条目 `synced=0`，需用户手动点同步（或 `open -a Zotero`
@@ -137,9 +209,13 @@ VALUES ({newItemID}, {parentItemID}, '<h2>笔记标题</h2><p>笔记内容</p>')
 
 ### 五、安全流程
 
+> ⚠️ **SQLite 写入前必须确认 Zotero 已关闭**。Zotero 运行时会锁定 `zotero.sqlite`，
+> 直插会报 `database is locked (5)`。写入期间不要重新打开 Zotero，否则同一失败。
+
 ```
 1. 关闭 Zotero
    osascript -e 'quit app "Zotero"'
+   sleep 2  # 等文件锁释放
 
 2. 写入批注 + 笔记到 SQLite
    sqlite3 ~/Zotero/zotero.sqlite "UPDATE ..."
@@ -147,6 +223,7 @@ VALUES ({newItemID}, {parentItemID}, '<h2>笔记标题</h2><p>笔记内容</p>')
 
 3. 重启 Zotero
    open -a Zotero
+   sleep 6~8  # 等 local API 起来
 
 4. 验证
    curl -s "http://127.0.0.1:23119/api/users/0/items/{itemKey}/children"

@@ -26,6 +26,7 @@
 - 术语名称 + 类别
 - 出现位置
 - 是否需要深挖（简单定义 / 标准 9 层 / 对比辨析）
+- **neuroscience 特有**：如有 fMRI 相关术语（搜光峰/体素/GLM/ROI/MVPA），标记为 neuroscience 类别，确保 Stage 6 时自动应用对应注意点
 
 ## 输出
 
@@ -45,6 +46,7 @@
   "concept_targets": [
     {"term": "gPPI", "category": "method", "depth": "standard"}
   ],
-  "analysis_text": "完整分析文本（供下游 Stage 6 消费）"
+  "analysis_text": "完整分析文本（供下游 Stage 6 消费）",
+  "domain": "psych"  // 或 "nlp" / "hybrid" / "neuroscience"
 }
 ```

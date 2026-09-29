@@ -77,23 +77,54 @@ A（Answer / 答案）: 核心发现是什么？
 
 按三个信号判定 `domain`，结果写入下游（Stage 6 按它选方法节模板，Stage 5 按它选审稿清单）：
 
-| 信号 | psych 信号 | nlp 信号 | fmri 信号 |
+| 信号 | psych 信号 | nlp 信号 | neuroscience 信号 |
 |------|------|------|------|
-| 术语 | 被试 / N / 量表 / 方差分析 / 效应量 / 问卷 | 模型 / 数据集 / 评测指标 / baseline / GPU / 消融 / prompt | fmri / BOLD / GLM / first-level / second-level / preprocessing / motion | 预处理步骤 / 解剖学 ROI / 效应量 |
-| venue | 心理学期刊（JEP / 心理科学 / Psychological...）| ACL / EMNLP / NAACL / COLING / arXiv-CS | NeuroImage / Neuropsychologia / PNAS / Nature Neuroscience | fmri 期刊/会议 |
-| 内容 | 行为/问卷/脑数据 + 统计推断 | 训练/评测/榜单 + 代码 | fMRI 数据/实验范式 / 预处理流程 / GLM 设计 / 组均值 / FDR 校正 | 采集参数 / 被试内分析 / 组水平分析 |
+| 术语 | 被试 / N / 量表 / 方差分析 / 效应量 / 问卷 | 模型 / 数据集 / 评测指标 / baseline / GPU / 消融 / prompt | **被试 / N / 方差分析 / GLM / 设计矩阵 / ROI / MVPA / 搜光峰 / 体素 / FFA / PPA / RSC / V1** |
+| venue | 心理学期刊（JEP / 心理科学 / Psychological...）| ACL / EMNLP / NAACL / COLING / arXiv-CS | **NeuroImage / JNeurosci / CerebCortex / NatureNeuro / PNAS neuro / Neuropsychologia** |
+| 内容 | 行为/问卷/脑数据 + 统计推断 | 训练/评测/榜单 + 代码 | **fMRI 数据 + 行为测量 + 统计推断 / 空间非独立性处理 / 多重比较校正** |
 
 ```
 domain = psych        → 统计完整性 checklist（下）
 domain = nlp          → NLP 评测公平性 checklist（下）
-domain = fmri         → fMRI 完整性 checklist（见下）
 domain = hybrid       → 两个 checklist 都跑（认知NLP/心理语言学/LLM心理学评估/行为+AI 混合）
+domain = neuroscience → fMRI 方法论 checklist + 结果证据分级 + 理论模型评估
 domain = review-theory → 不跑 checklist，走论证结构拆解
 ```
 
 > hybrid 判定俗例：LLM 心理学评估论文 = 被试(N) + 模型 + 指标 → 两者都上。两域互补：NLP 论文吃 psych 的显著性/效应量纪律；psych 用 AI 工具的论文吃 nlp 的可复现性/污染检查。
 
 **规则**：若论文类型为 Review / Theory / Position（无被试与实验设计），**跳过方法论三层拆解**，改为拆论证结构（主张链条→证据类型→推理跳跃点）。其余维度照常。
+
+**额外规则——fMRI/神经科学论文**：
+- 必须包含 **fMRI 获取参数**（TR/TE/体素/扫描序列）
+- 必须包含 **预处理细节**（运动修正、空间平滑、标准化、ICA/AROMA）
+- 必须包含 **ROI 定义方案**（事先定义 vs data-driven）
+- 必须包含 **MVPA 分析**（分类器类型、交叉验证方案）
+- 必须包含 **多重比较校正方法**（FWE/FDR/AlphaSim）
+- 必须包含 **图像控制**（低级视特征的渐进式去除）
+
+```
+层 1: 操作描述 → 作者写了什么
+      psych: 被试是谁？任务长什么样？流程怎么走？
+      nlp: 基线/模型/数据/评测 分别是什么？
+      neuroscience: **fMRI 采集参数**（TR/TE/体素/扫描序列）、**预处理链路**（运动修正/平滑/标准化）、**ROI 定义**、**MVPA 分类器**、**搜光分析**
+
+层 2: 设计逻辑 → 问三个 WHY（LitEngram 深度标志）
+      psych: 为什么选这个人数？（有无 power analysis？）
+             为什么用这个实验设计？（不是其他设计？）
+             为什么要做这些统计分析？（不是其他方法？）
+      nlp: 为什么用这个模型/基座？为什么选这些指标？为什么这个数据规模/split？
+      neuroscience: **为什么用这种 GLM 设计？** / **为什么选这个 ROI？** / **为什么用这种 MVPA 方案？** / **为什么需要搜光分析？**
+
+层 3: 方法局限 → 反向验证
+      psych: 如果降低样本量，结论还成立吗？
+             如果换一种统计方法，结论会变吗？
+             这个设计在什么条件下会失效？
+      nlp: 换基座模型，结论变吗？换 seed / 换评测指标 / 换 prompt 模板，结论变吗？
+      neuroscience: **如果降低被试数/扫描次数，结论还成立吗？**
+             **如果换一种预处理流程，结论会变吗？**
+             **如果换一种多重比较校正方法，结论会变吗？**
+            （任何一个"换"翻车 → 该结论标记【对设置敏感】）
 
 ```
 层 1: 操作描述 → 作者写了什么
@@ -125,16 +156,6 @@ domain = review-theory → 不跑 checklist，走论证结构拆解
       [ ] 数据污染/泄漏：训练/测试重叠？预训练数据 contamination？
       [ ] 人类评估：评估者数 + 指导语 + 一致性（kappa/ICC）？
       [ ] 代码/权重公开：可复现性承诺？
-
-> **fMRI 完整性 checklist**（fmri 域）：
-      [ ] 预处理完整性：头动校正、畸变校正、核心gistration、空间标准化、平滑、高通滤波均已执行并报告参数
-      [ ] 头动质量：FD > 0.5mm 被剔除 volumes % 报告，scrubbing 方法说明
-      [ ] GLM 设计：first-level 设计矩阵、对比定义、AR(1) 校正报告
-      [ ] 组水平分析：second-level 设计、多重比较校正方法（FWE/FDR/cluster）、校正阈值报告
-      [ ] ROI 分析：ROI 定义是否独立于测试对比（避免 double-dipping）
-      [ ] 排除标准：参与者排除原因、排除比例、demographic 对比报告
-      [ ] 效应量与 CI：Cohen's d / partial η² 及其 95% CI 报告
-      [ ] 预注册：分析计划是否预先注册（OSF/AsPredicted）
 
 层 3: 方法局限 → 反向验证
       psych: 如果降低样本量，结论还成立吗？

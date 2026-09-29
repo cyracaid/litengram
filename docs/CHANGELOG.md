@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.6.0] - 2026-09-29
+
+### Added
+- ✨ **PDF 高亮合法注入**（`scripts/zotero_highlight_builder.py`）：用 PyMuPDF 字符级 core 匹配 + y 翻转
+  （`zotero_y = pageH − pymupdf_y`）生成合法 `position`，批量 INSERT 高亮 + 4 层批注。
+  推翻 v1.2「SQLite 不可能构造合法 position」断言。EMBA 验证：NeuroImage + Biological Psychology 两篇 41 条成功渲染。
+
+### Fixed
+- 🔧 **note 必须包 `<div class="zotero-note znv1">`**：否则 Zotero 启动时把整篇当纯文本二次转义成 `&lt;h1&gt;` 乱码
+- 🔧 **annotation schema 纠正**：`itemAnnotations` 无 `annotatesItemID` 列；`parentItemID` 必须是 attachment 的 itemID；
+  合法列 = type / authorName / text / comment / color / pageLabel / sortIndex(三段) / position / isExternal
+- 🔧 **authorName 必须设置**（借鉴 1.3.0 的 zotero_annotation_sync 经验），否则 Zotero UI 不渲染
+
 ## [1.3.0] - 2026-09-09
 
 ### Added

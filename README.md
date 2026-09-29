@@ -576,10 +576,13 @@ A: 见 [CONTRIBUTING.md](docs/CONTRIBUTING.md)
 
 ## 🛣️ Roadmap (未来计划)
 
-### 📅 Version 1.3 (Current - 2026-09-09)
-- ✅ 4-layer annotation system
-- ✅ Ollama integration
-- ✅ Notion sync
+### 📅 Version 1.6 (Current - 2026-09-29)
+- ✅ PDF 高亮合法注入（PyMuPDF position 生成，`zotero_highlight_builder.py`）
+- ✅ note znv1 wrapper 修复（不再转义乱码）
+- ✅ annotation schema 纠正（无 annotatesItemID 列；parent = attachment itemID）
+- ✅ 4-layer annotation system / Ollama integration / Notion sync
+
+### 📅 Version 1.3 (2026-09-09)
 - ✅ Bug fix: authorName rendering
 
 ### 🎯 Version 1.4 (Next - 2026-10-31)
@@ -741,6 +744,6 @@ See [LICENSE](LICENSE) for details.
 
 Made with ❤️ for researchers and knowledge enthusiasts
 
-Last Updated: 2026-09-09 | Version 1.3 | [Changelog](docs/CHANGELOG.md)
+Last Updated: 2026-09-29 | Version 1.6 | [Changelog](docs/CHANGELOG.md)
 
 </div>

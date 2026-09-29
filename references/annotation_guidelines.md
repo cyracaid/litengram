@@ -8,15 +8,23 @@
 ```
 有 highlight/underline → 模式 A（混合）：
   步骤 1: 对已有 annotation → SQLite UPDATE comment（安全，不动 position）
-  步骤 2: AI 补充 ~10 条 → 写入笔记 📌 关键标注 节（不创建新 PDF 高亮）
+  步骤 2: AI 补充 ~10 条 → 写入笔记 📌 关键标注 节 + 可选 PDF 高亮
   
 无 highlight/underline → 模式 B（纯 AI）：
-  生成 ~20 条 → 全部写入笔记 📌 关键标注 节（不创建新 PDF 高亮）
+  生成 ~20 条 → 全部写入笔记 📌 关键标注 节 + 可选 PDF 高亮
 
-> 架构约束：itemAnnotations.position 需要合法的 PDF 坐标（pageIndex + rects），
-> 这些数据只能由 Zotero 内部的 PDF 渲染引擎生成，SQLite 不可能构造合法 position。
-> 因此禁止 INSERT 新 annotation 条目到 itemAnnotations 表。
-> UPDATE 已有 annotation 的 comment 字段是安全的（不改 position）。
+> 架构约束（v1.6 更新）：itemAnnotations.position 需要合法的 PDF 坐标（pageIndex + rects）。
+> v1.2 曾断言「SQLite 不可能构造合法 position」——**这个断言已被证伪**（2026-09 实战验证）：
+> PyMuPDF (`get_text("words")` / `get_text("dict")`) 能精确定位任意引文的字符级坐标，
+> 经 y 轴翻转校准后即可合法写入 annotation，Zotero 会正常渲染高亮。
+> 前提是**坐标系校准**：Zotero position 的 y 轴原点在页面底部（PDF 原生坐标系），
+> PyMuPDF 的 y 轴原点在顶部，二者满足 `zotero_y = pageHeight − pymupdf_y`。
+> 校准方法见 zotero_workflow.md §四。
+>
+> 因此两条路都合法：
+> - 保守路径（默认）：AI 标注全部嵌入笔记 📌 节，不碰 PDF（零风险）
+> - 高亮路径（可选，见 zotero_workflow.md §四）：用 PyMuPDF 生成合法 position，批量 INSERT
+> UPDATE 已有 annotation 的 comment 字段始终安全（不改 position）。
 ```
 
 ## 4 层标注结构
@@ -67,8 +75,11 @@
 
 ### 锚定约束（技术关键）
 
-新建 annotation 的 `text` 字段必须是 PDF 正文里**精确存在的连续子串**（否则高亮无法锚定）。
-选段前先从提取的全文里定位到确切原文，再截取。若某关键点在 PDF 里找不到干净可锚定的原句，**退而在笔记的"概念详解"区展开**，不硬造 annotation。
+高亮的渲染锚点 = `position`（pageIndex + rects），**不是** `text`。构造方式见 zotero_workflow.md §四（PyMuPDF 字符级定位 + y 翻转）。
+
+- `text` 字段是侧栏显示的元数据，存引文原文即可（无需与 PDF 逐字符一致）
+- 定位失败（PDF 扫描版/无文本层）→ **退而在笔记的"概念详解"区展开**，不硬造 annotation
+- 若 PDF 为扫描件（`get_text("dict")` 无文本）→ 无法生成合法 position，放弃该条高亮
 
 ---
 
