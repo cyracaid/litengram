@@ -153,7 +153,7 @@ INSERT INTO itemAnnotations (itemID, parentItemID, type, authorName,
                              text, comment, color, pageLabel, sortIndex,
                              position, isExternal)
 VALUES ({newItemID}, {attachmentItemID}, 1, '',
-        '引文原文', '【定义】…【本文角色】…【论证关联】…【延伸】…',
+        '引文原文', '白话批注（v2.0：一段人话，不用【定义】【本文角色】等标签）',
         '#ffd400', '{pageIndex+1}',
         '{pageIndex:05d}|{sortKey:06d}|00001',
         '{"pageIndex":N,"rects":[[x0,y0,x1,y1],...]}', 0);
@@ -161,6 +161,7 @@ VALUES ({newItemID}, {attachmentItemID}, 1, '',
 
 - `parentItemID` = **attachment 的 itemID**（不是 journalArticle 的），从 `itemAttachments` 查
 - `text` 存引文原文即可（渲染锚点是 position，不是 text）
+- `comment` 写白话批注（v2.0：合成一段人话，不露字段标签；见 annotation_guidelines.md）
 - `type` 存 1（highlight）；颜色 `#ffd400` 黄
 - `sortIndex` 三段格式（Zotero 不严格校验，形似即可）
 - `libraryID=1`，`synced=0`（需手动同步）

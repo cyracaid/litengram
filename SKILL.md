@@ -28,6 +28,20 @@ compatibility:
 
 ---
 
+## 精读写作哲学（v2.0）
+
+**精读要像人写的批判性阅读笔记，不要像 AI 标注报告。**
+
+- 精读 = **展开式人类精读笔记**：白话、连贯、先解释后评价、先理由后结论。写给"聪明但没读这篇论文的人"看。
+- **去标签**：不用 `【定义】/【本文角色】/【论证关联】/【延伸】/【反驳·我方】` 这类括号字段；写成自然句。
+- **术语先白话**：先讲"它其实是说……"，再给英文，再说本文作用。
+- **分工清楚**：AI 标注、关键引用、逐条批注留在**原文层**（Zotero 内联标注）；精读页不重复列清单。
+- **统计模型讲设置**：用了 RM-ANOVA / GLM / HBM / LME / 贝叶斯 / 非参数 / PF 拟合时，用人话讲清它**怎么搭的**，不只写名字。
+- **emoji 极简**：全文只留 `⛰️⚔️📌` 等级符号。
+- 8 锚点骨架 + 内容门禁 + 示范段，详见 `references/literature_note_template.md`。
+
+---
+
 ## 架构概览
 
 LitEngram 是 **meta-skill**——主 agent 负责调度，各阶段通过 `task()` 分发到子 agent 执行：
@@ -55,7 +69,7 @@ LitEngram 是 **meta-skill**——主 agent 负责调度，各阶段通过 `task
 | 0 Dedup | `task()` | 论文标识 | 查重结果（new / duplicate / partial）|
 | 1-2 Intake | `task()` | 论文标识（DOI / key / 标题） | 优先级 + 上下文 + PDF 全文 + 标注清单 + litreview_dir |
 | 3 Analysis | `task()` | 上文产出 + `references/` | 5 维度分析文本 + 概念深挖素材 |
-| 4-5 Annotations | `task()` | 分析文本 + PDF + 标注清单 | UPDATE 已有注释 + AI 标注表格（嵌入笔记）+ 审稿人报告 |
+| 4-5 Annotations | `task()` | 分析文本 + PDF + 标注清单 | UPDATE 已有注释 + 新建内联标注（Zotero 侧栏）+ 审稿人报告 |
 | 6 Note | `task()` | 所有上文 + `references/` | 结构化笔记 Markdown |
 | 7 Sync | **主 agent 直行** | 笔记 .md + 脚本 | 本地 .md + Zotero note + Notion page |
 
@@ -70,8 +84,8 @@ LitEngram 是 **meta-skill**——主 agent 负责调度，各阶段通过 `task
 流程:
 ```
 1. 从 Zotero 获取论文 itemKey / attachmentKey / parentItemID
-2. Stage 4-5: 运行时查询当前标注数 → 动态判定模式 → 生成标注
-3. Stage 6: 更新笔记中 📌 关键标注 节
+2. Stage 4-5: 运行时查询当前标注数 → 动态判定模式 → 生成内联标注
+3. Stage 6: 更新精读（笔记内容，按 8 锚点）
 4. Stage 7: 同步 Zotero 子笔记 + 本地 .md + Notion
 ```
 
@@ -185,14 +199,14 @@ ns.sync_note(title=..., markdown_content=..., date_str="...", skip_if_exists=Fal
 | 文件 | 内容 | 被谁读 |
 |------|------|--------|
 | `references/stage_0_dedup.md` | Stage 0 查重 task prompt | task 调度 |
-| `references/paper_priority.md` | 论文类型七分类、重要等级、阅读策略 | Stage 1-2 |
+| `references/paper_priority.md` | 论文类型九分类、重要等级、阅读策略 | Stage 1-2 |
 | `references/research_profile_template.md` | 研究上下文模板 | Stage 1-2 |
 | `references/zotero_workflow.md` | Zotero API/SQLite 技术细节 | Stage 1-2, 7 |
 | `references/literature_analysis_framework.md` | 5 维度分析范式 | Stage 3 |
-| `references/concept_excavation.md` | 概念深挖 9 层规格 | Stage 3, 4-5, 6 |
+| `references/concept_excavation.md` | 概念白话解释的内容要求（去字段标签） | Stage 3, 4-5, 6 |
 | `references/annotation_guidelines.md` | 混合标注规则 | Stage 4-5 |
 | `references/reviewer_protocol.md` | 审稿人自审协议 | Stage 4-5 |
-| `references/literature_note_template.md` | 笔记模板 + 结构门禁 + 输出兼容 | Stage 6 |
+| `references/literature_note_template.md` | 8 锚点精读模板 + 内容门禁 + 文风 | Stage 6 |
 | `references/notion_sync.md` | Notion 同步规格（参考用） | Stage 7 |
 | `references/stage_1-2_intake.md` | Intake 阶段 task prompt | task 调度 |
 | `references/stage_3_analysis.md` | 分析阶段 task prompt | task 调度 |
@@ -209,12 +223,23 @@ litengram/
   README.md
   scripts/
     notion_sync.py            ← Notion API 同步
-    zotero_sync.py            ← Zotero SQLite 写入
+    _markdown_blocks.py       ← Markdown → Notion blocks
+    zotero_sync.py            ← Zotero SQLite 写入（子笔记）
+    zotero_upload.py          ← Web API 上传 PDF 附件
+    zotero_cloud.py           ← 云端下载缺失 PDF
+    zotero_annotation_sync.py ← 内联标注同步
+    zotero_highlight_builder.py ← PyMuPDF 高亮定位
+    synthesize_notes.py       ← 跨论文知识合成
   references/
-    (原分析指南)               ← 各阶段详细规格
-    stage_0_dedup.md          ← task prompt 模板
-    stage_1-2_intake.md       ← task prompt 模板
-    stage_3_analysis.md       ← task prompt 模板
-    stage_4-5_annotations.md  ← task prompt 模板
-    stage_6_note.md           ← task prompt 模板
+    literature_note_template.md   ← 8 锚点精读模板（v2.0）
+    literature_analysis_framework.md ← 5 维度分析引擎 + 统计设置检查点
+    concept_excavation.md         ← 概念白话解释要求
+    annotation_guidelines.md      ← 内联标注写法
+    reviewer_protocol.md          ← 审稿人自审
+    paper_priority.md             ← 类型/等级/策略
+    research_profile_template.md  ← 研究上下文模板
+    zotero_workflow.md            ← Zotero API/SQLite 细节
+    notion_sync.md                ← Notion 同步规格
+    stage_0_dedup.md / stage_1-2_intake.md / stage_3_analysis.md
+    stage_4-5_annotations.md / stage_6_note.md   ← task prompt 模板
 ```
