@@ -1,7 +1,7 @@
-# Stage 4-5: Cognitive Annotation + Reviewer
+# Stage 4-5: Cognitive Annotation + Reviewer (v2.0)
 
-> 由 LitEngram meta-skill 调度。标注已有划线 + 生成 AI 补充标注（嵌入笔记）+ 审稿人自审。
-> v1.2 修复：不再通过 SQLite INSERT 创建新 PDF annotation，AI 补充标注改为嵌入笔记 📌 关键标注 节。
+> 由 LitEngram meta-skill 调度。标注已有划线 + 生成 AI 补充标注（**内联进原文**）+ 审稿人自审。
+> **v2.0**：AI 标注只写内联（Zotero 侧栏批注），**不再汇总成表格写进精读**；批注用白话段落，不用 `1️⃣/【定义】` 标签。
 
 ## 输入
 
@@ -20,8 +20,8 @@
 curl -s "http://127.0.0.1:23119/api/users/0/items/{attachmentKey}/children?itemType=annotation"
 ```
 
-- `count > 0` → 模式 A（混合）：标注已有 annotation + AI 补充嵌入笔记
-- `count === 0` → 模式 B（纯 AI）：全部 AI 标注嵌入笔记
+- `count > 0` → 模式 A（混合）：注释已有 annotation + AI 补充内联
+- `count === 0` → 模式 B（纯 AI）：全部 AI 标注内联
 
 **Fallback 机制**：
 
@@ -30,7 +30,6 @@ import sqlite3, os, json, urllib.request
 
 def get_annotation_count(attachment_key, attachment_item_id):
     """Try Zotero API, fall back to SQLite on failure."""
-    # Try 1: Zotero API
     try:
         url = f"http://127.0.0.1:23119/api/users/0/items/{attachment_key}/children?itemType=annotation"
         req = urllib.request.Request(url)
@@ -40,8 +39,7 @@ def get_annotation_count(attachment_key, attachment_item_id):
             return len(annotations), annotations
     except Exception as e:
         print(f"[LitEngram] Zotero API failed: {e}. Falling back to SQLite...")
-    
-    # Try 2: SQLite
+
     try:
         db_path = os.path.expanduser("~/Zotero/zotero.sqlite")
         conn = sqlite3.connect(db_path)
@@ -60,8 +58,8 @@ def get_annotation_count(attachment_key, attachment_item_id):
         return 0, []
 ```
 
-- 成功: 使用 API 返回的标注列表
-- API 失败且 SQLite OK: 使用 SQLite 数据
+- 成功: 用 API 返回的标注列表
+- API 失败且 SQLite OK: 用 SQLite 数据
 - 两者都失败: 默认 Mode B，不阻塞流程
 
 同时通过 SQLite 查询已有 annotation 的 itemID 和当前 comment 状态：
@@ -73,14 +71,14 @@ JOIN items i ON ia.itemID = i.itemID
 WHERE ia.parentItemID = {attachmentItemID}
 ```
 
-- `comment 为空或仅含 [AI] 前缀` → 需要写入/覆盖
+- `comment 为空或仅含 [AI]/🤖 前缀` → 写入/覆盖
 - `comment 已有有意义内容` → 跳过（保留用户/之前的注释）
 
 ### 1. 读参考文件
 
-- `references/annotation_guidelines.md` — v1.2 两路分流规则 + 📌 关键标注格式
-- `references/concept_excavation.md` — 9 层深挖规格（标注中嵌深挖）
-- `references/reviewer_protocol.md` — 7 维度审稿人自审
+- `references/annotation_guidelines.md` — 两路分流规则 + 白话批注写法
+- `references/concept_excavation.md` — 概念白话解释的内容要求
+- `references/reviewer_protocol.md` — 7 维度审稿人自审（输出成段落）
 
 ### 2. 模式 A：用户有划线 → 注释已有 + AI 补充
 
@@ -88,12 +86,11 @@ WHERE ia.parentItemID = {attachmentItemID}
 
 ```sql
 -- 安全操作：只改 comment 字段，不动 position/sortIndex/pageLabel
-UPDATE itemAnnotations SET comment = '{4层批注}' WHERE itemID = {annotationItemID};
+UPDATE itemAnnotations SET comment = '{白话批注}' WHERE itemID = {annotationItemID};
 ```
 
-- 对每条用户 highlight/underline 按 4 层结构写批注（定义+溯源 / 本文角色 / 论证关联 / 批判延伸）
-- 若标注原文含关键术语，第 1 层按 concept_excavation.md 的 9 层规格展开
-- 存在易混概念时做并排辨析表（写在 comment 里）
+- 对每条用户 highlight/underline 按白话风格写批注（内部按"定义+溯源 / 本文角色 / 论证关联 / 批判延伸"过一遍，输出合成一段人话，不露标签）
+- 若标注原文含关键术语，按 `concept_excavation.md` 白话讲清
 
 **步骤 1b：质量校验**
 
@@ -104,7 +101,7 @@ SELECT
   itemID,
   CASE 
     WHEN comment IS NULL OR length(comment) < 50 THEN 'FAIL — 过短或空'
-    WHEN comment NOT LIKE '%定义%' AND comment NOT LIKE '%溯源%' AND comment NOT LIKE '%本文角色%' THEN 'WARN — 缺定义/溯源/角色层'
+    WHEN comment LIKE '%【定义】%' OR comment LIKE '%1️⃣%' OR comment LIKE '%【本文角色】%' THEN 'WARN — 含模板标签'
     ELSE 'OK'
   END AS quality_flag
 FROM itemAnnotations 
@@ -115,10 +112,11 @@ ORDER BY quality_flag DESC;
 
 质量标准：
 - 长度 ≥ 50 字符
-- 至少包含以下 3 层中的 2 层标记：【定义】/【溯源】/【本文角色】
+- 是中文解释/判断，不是英文直译、不是纯转述
+- 不含 `【定义】`/`1️⃣`/`【本文角色】` 这类模板标签
 
 FAIL → 重写该条 comment。
-WARN → 标注为待审阅，在输出中列出。
+WARN → 去标签重写（v2.0 不再接受字段标签批注）。
 
 返回时在 JSON 中新增 quality_check 字段：
 
@@ -134,37 +132,27 @@ WARN → 标注为待审阅，在输出中列出。
 }
 ```
 
-**步骤 2：AI 补充 ~10 条 → 生成 📌 关键标注 Markdown 表格**
+**步骤 2：AI 补充 ~10 条 → 内联 annotation**
 
-扫描全文，找出用户没划但高价值的段落（满足以下任一条件）：
+扫描全文，找用户没划但高价值的段落（满足任一）：
 (a) 含用户很可能不懂的术语
-(b) 是让论文成立的承重方法决策
-(c) 是核心论点的关键证据句
+(b) 让论文成立的承重方法决策
+(c) 核心论点的关键证据句
 (d) 作者强调的反直觉结论或局限
 
-为这 ~10 条生成 Markdown 表格，格式：
+为这 ~10 条新建内联 annotation（写入 SQLite `items` + `itemAnnotations`，定位方式见 zotero_workflow.md §四），白话批注，以 `🤖 ` 前缀开头。
 
-```markdown
-### 📌 关键标注 (AI Annotation Highlights)
+> **v2.0 变更**：这些 AI 标注**只写内联**，不再生成 `### 📌 关键标注` 表格写进精读。
 
-| # | 原文 | 区域 | 批注 |
-|---|------|------|------|
-| 1 | "...exact PDF text..." | Intro | 【定义】... 【本文角色】... 【论证关联】... 【延伸】... |
-```
+### 3. 模式 B：用户无划线 → 全部 AI 标注内联
 
-每条批注 ~80-150 字，含 4 层结构但压缩为一段。
-
-### 3. 模式 B：用户无划线 → 全部 AI 标注嵌入笔记
-
-生成 ~20 条 📌 关键标注 Markdown 表格，按区域分配：
-- Intro ~5 / Methods ~7 / Results ~4 / Discussion ~4
-
+生成 ~20 条内联 annotation，按区域分配：Intro ~5 / Methods ~7 / Results ~4 / Discussion ~4。
 格式同模式 A 步骤 2。
 
 ### 4. 审稿人自审
 
 ⛰️ 级强制，⚔️ 级可选，📌/🌫️ 跳过。
-用敌对视角审视笔记初稿，输出 7 维度评估 + 攻击点。
+用敌对视角审视精读初稿，输出 7 维度评估 + 攻击点，写成段落（见 `reviewer_protocol.md`），落进精读的 `## 局限与批判` / `## 我的疑问` / `## 待验证`。
 
 ## 输出
 
@@ -174,7 +162,7 @@ WARN → 标注为待审阅，在输出中列出。
 {
   "mode": "A" or "B",
   "existing_annotations_updated": N,
-  "ai_annotation_table_markdown": "### 📌 关键标注 (AI Annotation Highlights)\n| # | ...",
+  "inline_annotations_added": M,
   "reviewer": {
     "performed": true,
     "weakest_claim": "",
@@ -182,3 +170,5 @@ WARN → 标注为待审阅，在输出中列出。
   }
 }
 ```
+
+> 注：`ai_annotation_table_markdown` 字段已废除——AI 标注不再进精读。
