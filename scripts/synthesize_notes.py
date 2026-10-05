@@ -1,5 +1,10 @@
-"""Cross-paper knowledge synthesis for LitEngram.
-Reads all litreview/*.md notes and produces structured synthesis.
+"""Cross-paper knowledge synthesis for LitEngram (v2.0).
+
+Reads all litreview/*.md notes and produces a structured synthesis.
+v2.0: notes use the 8-anchor skeleton (基本信息 / 这篇在讲什么 / 核心论证 /
+作者论证与证据 / 局限与批判 / 我的疑问 / 待验证 / 和我的研究的关系 / 原文摘要).
+This script parses those anchors; it tolerates older notes (falls back to
+title+grade only) without crashing.
 """
 
 import os, re
@@ -11,90 +16,109 @@ LITREVIEW_DIR = Path(os.environ.get(
     str(Path.home() / "Documents/litengram/litreview")
 ))
 
+# v2.0 anchor headings (frozen — see literature_note_template.md)
+ANCHORS = [
+    "基本信息",
+    "这篇在讲什么",
+    "核心论证",
+    "作者论证与证据",
+    "局限与批判",
+    "我的疑问",
+    "待验证",
+    "和我的研究的关系",
+    "原文摘要",
+]
 
-def section_between(content, start_marker, end_marker):
-    """Extract text between two markers. Non-greedy, no DOTALL."""
-    idx = content.find(start_marker)
-    if idx == -1:
-        return ""
-    idx += len(start_marker)
-    end = content.find(end_marker, idx)
-    if end == -1:
-        return content[idx:].strip()
-    return content[idx:end].strip()
+# Older headings we still map, for backward tolerance
+LEGACY_MAP = {
+    "与你领域的关系": "和我的研究的关系",
+    "与你研究的关系": "和我的研究的关系",
+}
+
+GRADE_SYMBOLS = ["⛰️", "⚔️", "📌", "🌫️"]
+
+
+def _split_sections(content):
+    """Return {heading: body_text} by '## ' headings. Body excludes nested '### '."""
+    sections = {}
+    current = None
+    buf = []
+    for line in content.split("\n"):
+        if line.startswith("## ") and not line.startswith("### "):
+            if current is not None:
+                sections[current] = "\n".join(buf).strip()
+            current = line[3:].strip()
+            buf = []
+        else:
+            if current is not None:
+                buf.append(line)
+    if current is not None:
+        sections[current] = "\n".join(buf).strip()
+    return sections
+
+
+def _norm_heading(h):
+    h = h.strip()
+    for old, new in LEGACY_MAP.items():
+        if old in h:
+            return new
+    for a in ANCHORS:
+        if h.startswith(a) or a in h:
+            return a
+    return h
 
 
 def parse_note(filepath):
-    with open(filepath) as f:
-        content = f.read()
+    content = Path(filepath).read_text()
+    lines = content.split("\n")
 
-    result = {
+    # title: first '# ' line, cleaned of emoji / boilerplate
+    title = ""
+    for line in lines:
+        if line.startswith("# "):
+            title = line[2:].strip()
+            break
+    title = re.sub(r"^[\U0001F000-\U0001FAFF\u2190-\u27BF\u2600-\u26FF\s]+", "", title)
+    title = re.sub(r"文献精读\s*[—\-–]?\s*", "", title)
+    title = re.sub(r"\s*[—\-–]\s*\d{4}-\d{2}-\d{2}.*$", "", title)
+    title = re.sub(r"^产物\s*\d+[:：].*", "", title).strip() or title
+    title = title.strip(" —-·")
+    if not title:
+        title = Path(filepath).stem
+
+    # grade: first grade symbol in the header (first ~12 lines)
+    grade = ""
+    for line in lines[:12]:
+        for sym in GRADE_SYMBOLS:
+            if sym in line:
+                grade = sym
+                break
+        if grade:
+            break
+
+    raw = _split_sections(content)
+    sections = {}
+    for h, body in raw.items():
+        sections[_norm_heading(h)] = body
+
+    def bullets(key):
+        body = sections.get(key, "")
+        out = []
+        for line in body.split("\n"):
+            s = line.strip()
+            if s.startswith("- ") and len(s) > 3:
+                out.append(s[2:].strip())
+        return out
+
+    return {
         "file": str(filepath),
-        "title": "",
-        "grade": "",
-        "keywords": [],
-        "known": [],
-        "gap": [],
-        "aim": "",
-        "findings": [],
-        "bridge": [],
-        "importance": "",
-        "unknown_unknowns": [],
-        "action_plan": [],
-        "limitations": [],
+        "title": title,
+        "grade": grade,
+        "sections": sections,
+        "relations": bullets("和我的研究的关系"),
+        "pending": bullets("待验证"),
+        "questions": bullets("我的疑问"),
     }
-
-    offset = 0
-    for line in content.split("\n"):
-        s = line.strip()
-
-        if s.startswith("## ") and not s.startswith("### "):
-            result["title"] = s[3:].strip()
-
-        if "重要等级**:" in s:
-            result["grade"] = s.split(":", 1)[1].strip()
-
-        if s.startswith("## 关键词:"):
-            result["keywords"] = [k.strip() for k in s[5:].split(",")]
-
-        if s.startswith("**Unknown Unknowns"):
-            result["unknown_unknowns"].append(s.split(":", 1)[1].strip() if ":" in s else s)
-
-        if s.startswith("- [ ]"):
-            result["action_plan"].append(s[5:].strip())
-
-        if s.startswith("- ") and len(s) > 10:
-            # Use this line's real offset in `content` (tracked while
-            # iterating below), not content.find(s). find(s) re-searches
-            # by text and always resolves to the *first* occurrence, so
-            # if the same short bullet text appears more than once in a
-            # note, every later duplicate got classified using the first
-            # one's surrounding context instead of its own.
-            before = content[:offset][-200:]
-            if any(h in before for h in ["已知 (Known)", "Known)"]):
-                result["known"].append(s[2:].strip())
-
-        offset += len(line) + 1  # +1 for the "\n" that split("\n") consumed
-
-    aim_text = section_between(content, "研究目标", "### 🧠 理论背景")
-    if not aim_text:
-        aim_text = section_between(content, "Research Aim", "###")
-    result["aim"] = aim_text.strip("- *").strip()[:200]
-
-    bridge_text = section_between(content, "与你领域的关系", "### ⭐ 为什么这篇重要")
-    if not bridge_text:
-        bridge_text = section_between(content, "与你研究的关系", "###")
-    if bridge_text:
-        for line in bridge_text.split("\n"):
-            line = line.strip("- *").strip()
-            if line and len(line) > 10:
-                result["bridge"].append(line[:120])
-
-    importance_text = section_between(content, "为什么这篇重要", "### 📄 原文摘要")
-    if importance_text:
-        result["importance"] = importance_text.strip()[:200]
-
-    return result
 
 
 def synthesize(notes_dir=None):
@@ -103,78 +127,68 @@ def synthesize(notes_dir=None):
 
     notes = []
     for f in sorted(Path(notes_dir).glob("*.md")):
-        parsed = parse_note(f)
+        if f.name.startswith("_"):          # skip _synthesis_*.md etc.
+            continue
+        try:
+            parsed = parse_note(f)
+        except Exception:
+            continue
         if parsed["title"] and "external_skills" not in str(f):
             notes.append(parsed)
 
     if not notes:
-        return "没有找到已处理的笔记。"
+        return "没有找到可合成的笔记。"
 
     out = []
-    out.append("# LitEngram 跨论文知识合成\n")
+    out.append("# LitEngram 跨论文知识合成 (v2.0)\n")
     out.append(f"基于 {len(notes)} 篇已精读论文\n")
 
     out.append("## 论文清单\n")
     for n in notes:
-        out.append(f"- **{n['grade']}** {n['title']}  — {Path(n['file']).name}")
+        g = n["grade"] or "·"
+        out.append(f"- {g} {n['title']}  — {Path(n['file']).name}")
     out.append("")
 
-    out.append("## 共享知识缺口\n")
-    all_unknowns = defaultdict(list)
-    for n in notes:
-        for u in n.get("unknown_unknowns", []):
-            all_unknowns[u].append(n["title"])
-
-    if all_unknowns:
-        for gap, papers in all_unknowns.items():
-            out.append(f"- **{gap}**\n  - 来源: {', '.join(papers)}")
-    else:
-        out.append("(未在已读论文中发现统一缺口)")
-    out.append("")
-
+    # 战略嫁接矩阵: from 和我的研究的关系
     out.append("## 战略嫁接矩阵\n")
-    out.append("| 方法/概念 | 来源论文 | 可以接到的 Phase |")
-    out.append("|-----------|----------|-------------------|")
-
-    bridges = []
+    out.append("| 来源论文 | 可以接到的点 |")
+    out.append("|-----------|--------------|")
+    any_bridge = False
     for n in notes:
-        for b in n.get("bridge", []):
-            bridges.append((b, n["title"]))
-
-    seen = set()
-    for bridge_text, source_title in bridges:
-        short = bridge_text[:80] + ("..." if len(bridge_text) > 80 else "")
-        if short not in seen:
-            seen.add(short)
-            if "Phase 1" in bridge_text or "线圈" in bridge_text:
-                phase = "Phase 1"
-            elif "Phase 2" in bridge_text or "预测" in bridge_text or "fMRI" in bridge_text:
-                phase = "Phase 2"
-            elif "Pilot" in bridge_text or "视频" in bridge_text:
-                phase = "Pilot"
-            else:
-                phase = "通用"
-            out.append(f"| {short} | {source_title} | {phase} |")
+        for b in n["relations"]:
+            any_bridge = True
+            short = b[:100] + ("..." if len(b) > 100 else "")
+            out.append(f"| {n['title'][:40]} | {short} |")
+    if not any_bridge:
+        out.append("| (无) | 笔记里没有列出具体的嫁接点 |")
     out.append("")
 
-    out.append("## 发现之间的张力\n")
-    out.append("| 发现 A | 来源 A | 发现 B | 来源 B | 关系 |")
-    out.append("|--------|--------|--------|--------|------|")
-    out.append("| FC 是最佳预测模态 | Dhamala 2023 | 内感受元认知独立于主观报告 | Ponzo 2021 | 互补: 双模态组合可能优于单模态 |")
-    out.append("| 焦虑可按威胁迫近度分段 | Abend 2023 | 个体预测需维度分 | Dhamala 2023 | 互补: 分段维度预测结合两者 |")
-    out.append("| 小样本预测精度膨胀 | Dhamala 2023 | CARED N=30 仅初步证据 | Ponzo 2021 | 一致: 都需更大样本 |")
+    # 共享行动项: from 待验证
+    out.append("## 共享行动项（来自各篇「待验证」）\n")
+    actions = defaultdict(list)
+    for n in notes:
+        for a in n["pending"]:
+            actions[a[:70]].append(n["title"])
+    if actions:
+        for a, papers in actions.items():
+            out.append(f"- {a}  — 来源: {', '.join(p[:30] for p in papers)}")
+    else:
+        out.append("(各篇未列「待验证」条目)")
     out.append("")
 
-    out.append("## 共享行动项\n")
-    all_actions = defaultdict(list)
+    # 悬而未决的问题: from 我的疑问
+    out.append("## 悬而未决的问题（来自各篇「我的疑问」）\n")
+    qcount = 0
     for n in notes:
-        for a in n.get("action_plan", []):
-            a_key = a[:60]
-            all_actions[a_key].append(n["title"])
+        for q in n["questions"]:
+            qcount += 1
+            out.append(f"- {q[:100]}  — {n['title'][:40]}")
+    if qcount == 0:
+        out.append("(各篇未列「我的疑问」条目)")
+    out.append("")
 
-    for action, papers in all_actions.items():
-        if len(papers) >= 2:
-            out.append(f"- [{len(papers)} 篇论文建议] {action}")
+    out.append("> 说明：跨论文的「共享缺口」与「发现张力」需要语义判断，脚本不臆造——")
+    out.append("> 请由 agent/用户基于上面各篇的「核心论证」「局限与批判」「和我的研究的关系」人工归纳。")
     out.append("")
 
     return "\n".join(out)
